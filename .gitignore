@@ -1,0 +1,24 @@
+# Build
+build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.user
+*.autosave
+
+# Qt
+*.qmlc
+*.jsc
+qmlcache/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Binaries
+omado
+omado_tests
