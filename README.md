@@ -81,4 +81,4 @@ cmake --build .
 ---
 
 ## 📄 License
-GPL-3.0 / MIT
+GPL-3.0
