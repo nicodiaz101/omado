@@ -21,17 +21,36 @@ Popup {
         border.width: 1
     }
 
+    property int currentHourNow: new Date().getHours()
     property int selectedHour: 9
     property int selectedMinute: 0
     property string selectedDayPreset: "today"
+
+    function updateDefaults() {
+        var now = new Date()
+        root.currentHourNow = now.getHours()
+        var nextHour = (now.getHours() + 1) % 24
+        root.selectedHour = nextHour
+        root.selectedMinute = 0
+        root.selectedDayPreset = (now.getHours() >= 23) ? "tomorrow" : "today"
+    }
+
+    onAboutToShow: {
+        updateDefaults()
+    }
 
     function formatIso(dayPreset, h, m) {
         var d = new Date()
         if (dayPreset === "tomorrow") {
             d.setDate(d.getDate() + 1)
         }
-        d.setHours(h, m, 0, 0)
-        return d.toISOString()
+        var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
+        var year = d.getFullYear()
+        var month = pad(d.getMonth() + 1)
+        var day = pad(d.getDate())
+        var hh = pad(h)
+        var mm = pad(m)
+        return year + "-" + month + "-" + day + "T" + hh + ":" + mm + ":00"
     }
 
     ColumnLayout {
@@ -46,28 +65,66 @@ Popup {
             font.bold: true
         }
 
-        // Quick options
+        // Quick dynamic options
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
 
+            // Preset 1: Later today / Tonight / Tomorrow Afternoon
             Rectangle {
                 Layout.fillWidth: true; height: 26; radius: 4
                 color: Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.05)
-                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: qsTr("Later today (18:00)"); color: Theme.foreground; font.family: "iA Writer Mono"; font.pixelSize: 11 }
+                
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: {
+                        if (root.currentHourNow < 18) return qsTr("Later today (18:00)")
+                        if (root.currentHourNow < 21) return qsTr("Tonight (21:00)")
+                        return qsTr("Tomorrow afternoon (14:00)")
+                    }
+                    color: Theme.foreground
+                    font.family: "iA Writer Mono"
+                    font.pixelSize: 11
+                }
+
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: { root.timeSelected(root.formatIso("today", 18, 0)); root.close() }
+                    onClicked: {
+                        if (root.currentHourNow < 18) {
+                            root.timeSelected(root.formatIso("today", 18, 0))
+                        } else if (root.currentHourNow < 21) {
+                            root.timeSelected(root.formatIso("today", 21, 0))
+                        } else {
+                            root.timeSelected(root.formatIso("tomorrow", 14, 0))
+                        }
+                        root.close()
+                    }
                 }
             }
 
+            // Preset 2: Tomorrow morning (09:00)
             Rectangle {
                 Layout.fillWidth: true; height: 26; radius: 4
                 color: Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.05)
-                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: qsTr("Tomorrow morning (09:00)"); color: Theme.foreground; font.family: "iA Writer Mono"; font.pixelSize: 11 }
+                
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Tomorrow morning (09:00)")
+                    color: Theme.foreground
+                    font.family: "iA Writer Mono"
+                    font.pixelSize: 11
+                }
+
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: { root.timeSelected(root.formatIso("tomorrow", 9, 0)); root.close() }
+                    onClicked: {
+                        root.timeSelected(root.formatIso("tomorrow", 9, 0))
+                        root.close()
+                    }
                 }
             }
         }

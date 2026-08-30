@@ -1,0 +1,7 @@
+[colors]
+background = "#1a1a2e"
+foreground = "#e0e0e0"
+accent     = "#7aa2f7"
+surface    = "#16213e"
+border     = "#2a2a4a"
+error      = "#f7768e"

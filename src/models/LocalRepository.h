@@ -24,6 +24,9 @@ public:
     QFuture<Task> createTask(const Task &task);
     QFuture<bool> updateTask(const Task &task);
     QFuture<bool> deleteTask(const QString &id);
+    QFuture<Task> fetchTaskById(const QString &id);
+    QFuture<bool> toggleTask(const QString &taskId, bool completed);
+    QFuture<bool> markReminded(const QString &taskId, bool reminded = true);
 
     QFuture<TaskStep> addStep(const QString &taskId, const QString &title);
     QFuture<bool> updateStep(const TaskStep &step);

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=OmaDo Daemon
+Comment=Task and Reminder Daemon for OmaDo
+Exec=omado --daemon
+Icon=omado
+Terminal=false
+Categories=Utility;
+X-GNOME-Autostart-enabled=true

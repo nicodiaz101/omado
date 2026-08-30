@@ -15,6 +15,9 @@ class ThemeReader : public QObject {
 
 public:
     explicit ThemeReader(QObject *parent = nullptr);
+    explicit ThemeReader(const QString &themePath, QObject *parent = nullptr);
+
+    bool loadFromFile(const QString &filePath);
 
     QColor background() const { return m_background; }
     QColor foreground() const { return m_foreground; }

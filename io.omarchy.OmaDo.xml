@@ -1,0 +1,30 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="io.omarchy.OmaDo">
+    <signal name="TasksChanged">
+      <arg name="listId" type="s" direction="out"/>
+    </signal>
+    <signal name="TodayTasksChanged">
+    </signal>
+    <method name="GetLists">
+      <arg type="a(ss)" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;OmaDoListEntry&gt;"/>
+    </method>
+    <method name="GetTasksForToday">
+      <arg type="aa{sv}" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;QVariantMap&gt;"/>
+    </method>
+    <method name="GetPendingCount">
+      <arg type="i" direction="out"/>
+      <arg name="listId" type="s" direction="in"/>
+    </method>
+    <method name="GetTotalPendingCount">
+      <arg type="i" direction="out"/>
+    </method>
+    <method name="ToggleTask">
+      <arg type="b" direction="out"/>
+      <arg name="taskId" type="s" direction="in"/>
+      <arg name="completed" type="b" direction="in"/>
+    </method>
+  </interface>
+</node>

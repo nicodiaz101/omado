@@ -55,10 +55,10 @@ Rectangle {
                 elide: Text.ElideRight
             }
 
-            // Subtitle badges (steps / due date)
+            // Subtitle badges (steps / due date / reminder)
             Row {
                 spacing: 8
-                visible: model.hasSteps || (model.dueDate !== "")
+                visible: model.hasSteps || (model.dueDate !== "") || (model.reminderAt !== "")
 
                 // Steps count badge
                 Row {
@@ -95,6 +95,27 @@ Rectangle {
 
                     Text {
                         text: model.dueDate
+                        color: Theme.accent
+                        opacity: 0.8
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 11
+                    }
+                }
+
+                // Reminder badge
+                Row {
+                    spacing: 4
+                    visible: model.reminderAt !== ""
+
+                    AppIcon {
+                        name: "alarm"
+                        size: 11
+                        color: Theme.accent
+                        opacity: 0.8
+                    }
+
+                    Text {
+                        text: model.reminderAt
                         color: Theme.accent
                         opacity: 0.8
                         font.family: "iA Writer Mono"

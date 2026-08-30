@@ -302,14 +302,21 @@ Rectangle {
                         id: detailDateMenu
                         MenuItem {
                             text: qsTr("Today")
-                            onTriggered: TaskModel.updateTaskDueDate(root.selectedIndex, new Date().toISOString().split('T')[0])
+                            onTriggered: {
+                                var d = new Date()
+                                var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
+                                var isoDate = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+                                TaskModel.updateTaskDueDate(root.selectedIndex, isoDate)
+                            }
                         }
                         MenuItem {
                             text: qsTr("Tomorrow")
                             onTriggered: {
                                 var d = new Date()
                                 d.setDate(d.getDate() + 1)
-                                TaskModel.updateTaskDueDate(root.selectedIndex, d.toISOString().split('T')[0])
+                                var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
+                                var isoDate = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+                                TaskModel.updateTaskDueDate(root.selectedIndex, isoDate)
                             }
                         }
                         MenuItem {
@@ -357,20 +364,38 @@ Rectangle {
                     Menu {
                         id: detailReminderMenu
                         MenuItem {
-                            text: qsTr("Later today (18:00)")
+                            text: {
+                                var now = new Date()
+                                if (now.getHours() < 18) return qsTr("Later today (18:00)")
+                                if (now.getHours() < 21) return qsTr("Tonight (21:00)")
+                                return qsTr("Tomorrow afternoon (14:00)")
+                            }
                             onTriggered: {
                                 var d = new Date()
-                                d.setHours(18, 0, 0, 0)
-                                TaskModel.updateTaskReminder(root.selectedIndex, d.toISOString())
+                                var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
+                                var h = 18
+                                if (d.getHours() >= 21) {
+                                    d.setDate(d.getDate() + 1)
+                                    h = 14
+                                } else if (d.getHours() >= 18) {
+                                    h = 21
+                                }
+                                var year = d.getFullYear()
+                                var month = pad(d.getMonth() + 1)
+                                var day = pad(d.getDate())
+                                TaskModel.updateTaskReminder(root.selectedIndex, year + "-" + month + "-" + day + "T" + pad(h) + ":00:00")
                             }
                         }
                         MenuItem {
-                            text: qsTr("Tomorrow (09:00)")
+                            text: qsTr("Tomorrow morning (09:00)")
                             onTriggered: {
                                 var d = new Date()
                                 d.setDate(d.getDate() + 1)
-                                d.setHours(9, 0, 0, 0)
-                                TaskModel.updateTaskReminder(root.selectedIndex, d.toISOString())
+                                var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
+                                var year = d.getFullYear()
+                                var month = pad(d.getMonth() + 1)
+                                var day = pad(d.getDate())
+                                TaskModel.updateTaskReminder(root.selectedIndex, year + "-" + month + "-" + day + "T09:00:00")
                             }
                         }
                         MenuItem {

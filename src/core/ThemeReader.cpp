@@ -25,6 +25,24 @@ ThemeReader::ThemeReader(QObject *parent) : QObject(parent) {
     });
 }
 
+ThemeReader::ThemeReader(const QString &themePath, QObject *parent)
+    : QObject(parent)
+    , m_themePath(themePath)
+{
+    loadTheme();
+
+    if (QFile::exists(m_themePath)) m_watcher.addPath(m_themePath);
+    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &) {
+        QTimer::singleShot(50, this, &ThemeReader::loadTheme);
+    });
+}
+
+bool ThemeReader::loadFromFile(const QString &filePath) {
+    m_themePath = filePath;
+    loadTheme();
+    return QFile::exists(filePath);
+}
+
 void ThemeReader::loadTheme() {
     QFile file(m_themePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -56,9 +74,9 @@ void ThemeReader::loadTheme() {
                 if (key == "background" && m_background != color) { m_background = color; changed = true; }
                 else if (key == "foreground" && m_foreground != color) { m_foreground = color; changed = true; }
                 else if (key == "accent" && m_accent != color) { m_accent = color; changed = true; }
-                else if (key == "lighter_background" && m_surface != color) { m_surface = color; changed = true; }
-                else if (key == "muted" && m_border != color) { m_border = color; changed = true; }
-                else if (key == "red" && m_error != color) { m_error = color; changed = true; }
+                else if ((key == "surface" || key == "lighter_background") && m_surface != color) { m_surface = color; changed = true; }
+                else if ((key == "border" || key == "muted") && m_border != color) { m_border = color; changed = true; }
+                else if ((key == "error" || key == "red") && m_error != color) { m_error = color; changed = true; }
             }
         }
     }

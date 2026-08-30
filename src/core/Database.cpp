@@ -125,6 +125,38 @@ bool Database::applyMigrations() {
         }
     }
     
+    if (currentVersion < 2) {
+        qDebug() << "[Database] Aplicando migración v2 (reminders support)...";
+        m_db.transaction();
+        
+        // Verificar si la columna 'reminded' ya existe
+        bool hasReminded = false;
+        QSqlQuery infoQuery(m_db);
+        if (infoQuery.exec("PRAGMA table_info(tasks)")) {
+            while (infoQuery.next()) {
+                if (infoQuery.value("name").toString() == "reminded") {
+                    hasReminded = true;
+                    break;
+                }
+            }
+        }
+        
+        bool ok = true;
+        if (!hasReminded) {
+            ok = executeSql("ALTER TABLE tasks ADD COLUMN reminded INTEGER NOT NULL DEFAULT 0;");
+        }
+        
+        if (ok) {
+            executeSql("INSERT INTO schema_version (version, applied_at) VALUES (2, datetime('now'))");
+            m_db.commit();
+            currentVersion = 2;
+        } else {
+            m_db.rollback();
+            qWarning() << "[Database] Falló la migración v2";
+            return false;
+        }
+    }
+    
     qDebug() << "[Database] Schema actualizado a versión:" << currentVersion;
     return true;
 }

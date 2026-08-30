@@ -63,7 +63,19 @@ static Task mapToTask(const QSqlQuery &q, QSqlDatabase &db) {
     QString dueDateStr = q.value("due_date").toString();
     if (!dueDateStr.isEmpty()) t.dueDate = QDate::fromString(dueDateStr, Qt::ISODate);
     QString reminderStr = q.value("reminder_at").toString();
-    if (!reminderStr.isEmpty()) t.reminderAt = QDateTime::fromString(reminderStr, Qt::ISODate);
+    if (!reminderStr.isEmpty()) {
+        t.reminderAt = QDateTime::fromString(reminderStr, Qt::ISODate);
+        if (!t.reminderAt.isValid()) {
+            t.reminderAt = QDateTime::fromString(reminderStr, "yyyy-MM-dd HH:mm:ss");
+        }
+        if (!t.reminderAt.isValid()) {
+            t.reminderAt = QDateTime::fromString(reminderStr, "yyyy-MM-dd HH:mm");
+        }
+        if (t.reminderAt.isValid()) {
+            t.reminderAt = t.reminderAt.toLocalTime();
+        }
+    }
+    t.reminded = q.value("reminded").toBool();
     t.recurrence = q.value("recurrence").toString();
     t.sortOrder = q.value("sort_order").toInt();
     t.createdAt = QDateTime::fromString(q.value("created_at").toString(), Qt::ISODate);
@@ -165,19 +177,20 @@ QFuture<Task> LocalRepository::createTask(const Task &task) {
 
         QSqlQuery q(db);
         q.prepare(R"(
-            INSERT INTO tasks (id, list_id, title, body, is_completed, is_my_day, importance, due_date, reminder_at, recurrence, sort_order, created_at)
-            VALUES (:id, :list_id, :title, :body, :is_completed, :is_my_day, :importance, :due_date, :reminder_at, :recurrence, :sort_order, :created_at)
+            INSERT INTO tasks (id, list_id, title, body, is_completed, is_my_day, importance, due_date, reminder_at, reminded, recurrence, sort_order, created_at)
+            VALUES (:id, :list_id, :title, :body, :is_completed, :is_my_day, :importance, :due_date, :reminder_at, :reminded, :recurrence, :sort_order, :created_at)
         )");
         q.bindValue(":id", t.id);
         q.bindValue(":list_id", t.listId);
         q.bindValue(":title", t.title);
-        q.bindValue(":body", t.body);
+        q.bindValue(":body", t.body.isNull() ? QStringLiteral("") : t.body);
         q.bindValue(":is_completed", t.isCompleted ? 1 : 0);
         q.bindValue(":is_my_day", t.isMyDay ? 1 : 0);
-        q.bindValue(":importance", t.importance.isEmpty() ? "normal" : t.importance);
+        q.bindValue(":importance", t.importance.isEmpty() ? QStringLiteral("normal") : t.importance);
         q.bindValue(":due_date", t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : QVariant());
         q.bindValue(":reminder_at", t.reminderAt.isValid() ? t.reminderAt.toString(Qt::ISODate) : QVariant());
-        q.bindValue(":recurrence", t.recurrence.isEmpty() ? "none" : t.recurrence);
+        q.bindValue(":reminded", t.reminded ? 1 : 0);
+        q.bindValue(":recurrence", t.recurrence.isEmpty() ? QStringLiteral("none") : t.recurrence);
         q.bindValue(":sort_order", t.sortOrder);
         q.bindValue(":created_at", t.createdAt.toString(Qt::ISODate));
         
@@ -199,7 +212,7 @@ QFuture<Task> LocalRepository::createTask(const Task &task) {
             qs.prepare("INSERT INTO task_steps (id, task_id, title, is_completed, sort_order) VALUES (:id, :task_id, :title, :is_completed, :sort_order)");
             qs.bindValue(":id", s.id);
             qs.bindValue(":task_id", s.taskId);
-            qs.bindValue(":title", s.title);
+            qs.bindValue(":title", s.title.isNull() ? QStringLiteral("") : s.title);
             qs.bindValue(":is_completed", s.isCompleted ? 1 : 0);
             qs.bindValue(":sort_order", s.sortOrder);
             qs.exec();
@@ -223,24 +236,71 @@ QFuture<bool> LocalRepository::updateTask(const Task &task) {
                 importance = :importance,
                 due_date = :due_date, 
                 reminder_at = :reminder_at, 
+                reminded = :reminded,
                 recurrence = :recurrence, 
                 sort_order = :sort_order
             WHERE id = :id
         )");
         q.bindValue(":id", task.id);
         q.bindValue(":title", task.title);
-        q.bindValue(":body", task.body);
+        q.bindValue(":body", task.body.isNull() ? QStringLiteral("") : task.body);
         q.bindValue(":is_completed", task.isCompleted ? 1 : 0);
         q.bindValue(":is_my_day", task.isMyDay ? 1 : 0);
-        q.bindValue(":importance", task.importance);
+        q.bindValue(":importance", task.importance.isEmpty() ? QStringLiteral("normal") : task.importance);
         q.bindValue(":due_date", task.dueDate.isValid() ? task.dueDate.toString(Qt::ISODate) : QVariant());
         q.bindValue(":reminder_at", task.reminderAt.isValid() ? task.reminderAt.toString(Qt::ISODate) : QVariant());
-        q.bindValue(":recurrence", task.recurrence);
+        q.bindValue(":reminded", task.reminded ? 1 : 0);
+        q.bindValue(":recurrence", task.recurrence.isEmpty() ? QStringLiteral("none") : task.recurrence);
         q.bindValue(":sort_order", task.sortOrder);
         
         bool ok = q.exec();
         if (!ok) {
             qWarning() << "[LocalRepository] updateTask error:" << q.lastError().text();
+        }
+        return ok;
+    });
+}
+
+QFuture<Task> LocalRepository::fetchTaskById(const QString &id) {
+    return QtConcurrent::run([id]() {
+        Task t;
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("SELECT * FROM tasks WHERE id = :id");
+        q.bindValue(":id", id);
+        if (q.exec() && q.next()) {
+            t = mapToTask(q, db);
+        }
+        return t;
+    });
+}
+
+QFuture<bool> LocalRepository::toggleTask(const QString &taskId, bool completed) {
+    return QtConcurrent::run([taskId, completed]() {
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("UPDATE tasks SET is_completed = :completed, completed_at = :completed_at WHERE id = :id");
+        q.bindValue(":completed", completed ? 1 : 0);
+        q.bindValue(":completed_at", completed ? QDateTime::currentDateTime().toString(Qt::ISODate) : QVariant());
+        q.bindValue(":id", taskId);
+        bool ok = q.exec();
+        if (!ok) {
+            qWarning() << "[LocalRepository] toggleTask error:" << q.lastError().text();
+        }
+        return ok;
+    });
+}
+
+QFuture<bool> LocalRepository::markReminded(const QString &taskId, bool reminded) {
+    return QtConcurrent::run([taskId, reminded]() {
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("UPDATE tasks SET reminded = :reminded WHERE id = :id");
+        q.bindValue(":reminded", reminded ? 1 : 0);
+        q.bindValue(":id", taskId);
+        bool ok = q.exec();
+        if (!ok) {
+            qWarning() << "[LocalRepository] markReminded error:" << q.lastError().text();
         }
         return ok;
     });
@@ -295,7 +355,7 @@ QFuture<TaskStep> LocalRepository::addStep(const QString &taskId, const QString 
         q.prepare("INSERT INTO task_steps (id, task_id, title, is_completed, sort_order) VALUES (:id, :task_id, :title, 0, 0)");
         q.bindValue(":id", s.id);
         q.bindValue(":task_id", s.taskId);
-        q.bindValue(":title", s.title);
+        q.bindValue(":title", s.title.isNull() ? QStringLiteral("") : s.title);
         if (!q.exec()) {
             qWarning() << "[LocalRepository] addStep error:" << q.lastError().text();
         }
@@ -309,7 +369,7 @@ QFuture<bool> LocalRepository::updateStep(const TaskStep &step) {
         QSqlQuery q(db);
         q.prepare("UPDATE task_steps SET title = :title, is_completed = :is_completed WHERE id = :id");
         q.bindValue(":id", step.id);
-        q.bindValue(":title", step.title);
+        q.bindValue(":title", step.title.isNull() ? QStringLiteral("") : step.title);
         q.bindValue(":is_completed", step.isCompleted ? 1 : 0);
         return q.exec();
     });
@@ -350,10 +410,12 @@ QFuture<QList<Task>> LocalRepository::getPendingReminders() {
         QList<Task> tasks;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
-        q.prepare("SELECT * FROM tasks WHERE reminder_at <= :now AND is_completed = 0 AND reminded = 0");
+        q.prepare("SELECT * FROM tasks WHERE reminder_at IS NOT NULL AND reminder_at != '' AND reminder_at <= :now AND is_completed = 0 AND reminded = 0");
         q.bindValue(":now", QDateTime::currentDateTime().toString(Qt::ISODate));
         if (q.exec()) {
             while (q.next()) tasks.append(mapToTask(q, db));
+        } else {
+            qWarning() << "[LocalRepository] getPendingReminders error:" << q.lastError().text();
         }
         return tasks;
     });

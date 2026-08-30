@@ -32,10 +32,11 @@ I love Omarchy, but I have Samsung devices. Samsung Reminders is a beatiful and 
 - [x] Slide-in task detail panel (`TaskDetail.qml`) with notes editor, subtask checklist, and deletion.
 - [x] Keyboard shortcuts (`N` for new task, `Space` to toggle, `Delete` to remove, `Arrows` to navigate, `Esc` to close drawer).
 
-### 🔲 Milestone 2: Native Notifications & Background Daemon (Next)
-- [ ] Direct D-Bus notification service via `org.freedesktop.Notifications`.
-- [ ] Background daemon mode (`omado --daemon`) for scheduled reminder monitoring.
-- [ ] Auto-start desktop entry / systemd user unit.
+### ✅ Milestone 2: Native Notifications & Background Daemon (Completed)
+- [x] Direct D-Bus notification service via `org.freedesktop.Notifications`.
+- [x] Background daemon mode (`omado --daemon`) without GUI for scheduled reminder monitoring.
+- [x] Full D-Bus IPC service (`io.omarchy.OmaDo`) exporting lists, today tasks, pending counts, and reactive signals.
+- [x] Auto-start desktop entry (`autostart/omado-daemon.desktop`) and systemd user unit (`systemd/omado.service`).
 
 ### 🔲 Milestone 3: Microsoft To Do Cloud Synchronization
 - [ ] OAuth 2.0 PKCE authentication with Microsoft Entra ID (no client secrets).
@@ -77,6 +78,54 @@ cmake --build .
 | `Delete` | Delete selected task |
 | `↑` / `↓` | Navigate task list |
 | `Escape` | Close task detail drawer |
+| `Ctrl+Q` | Quit application |
+
+---
+
+## 🤖 Background Daemon & D-Bus IPC
+
+Run the lightweight background daemon (which handles scheduled reminders and exposes the D-Bus API without any UI overhead):
+
+```bash
+omado --daemon
+```
+
+### Autostart Options
+
+#### 1. Via Hyprland (`hyprland.conf`) — Recommended for Omarchy
+Add the following line to your `~/.config/hypr/hyprland.conf` (or `~/.config/hypr/autostart.conf`):
+
+```ini
+exec-once = omado --daemon
+```
+
+#### 2. Via systemd User Service
+```bash
+mkdir -p ~/.config/systemd/user
+cp systemd/omado.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now omado.service
+```
+
+#### 3. Via XDG Autostart (.desktop)
+```bash
+mkdir -p ~/.config/autostart
+cp autostart/omado-daemon.desktop ~/.config/autostart/
+```
+
+### Interacting via D-Bus (`io.omarchy.OmaDo`)
+You can query or manipulate tasks directly from terminal or scripts (e.g. Quickshell, Waybar, or custom shortcuts):
+
+```bash
+# Get total pending task count
+qdbus io.omarchy.OmaDo /io/omarchy/OmaDo io.omarchy.OmaDo.GetTotalPendingCount
+
+# Get pending count for a specific list
+qdbus io.omarchy.OmaDo /io/omarchy/OmaDo io.omarchy.OmaDo.GetPendingCount "special-myday"
+
+# Toggle task completed status
+qdbus io.omarchy.OmaDo /io/omarchy/OmaDo io.omarchy.OmaDo.ToggleTask "<task-id>" true
+```
 
 ---
 

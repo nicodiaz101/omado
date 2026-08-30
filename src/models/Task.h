@@ -15,6 +15,7 @@ struct Task {
     QString         importance   = "normal";
     QDate           dueDate;
     QDateTime       reminderAt;
+    bool            reminded     = false;
     QString         recurrence   = "none";
     QList<TaskStep> steps;
     int             sortOrder    = 0;

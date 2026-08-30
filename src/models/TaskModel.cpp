@@ -2,6 +2,21 @@
 #include <QUuid>
 #include <QDebug>
 
+static QDateTime parseDateTimeLocal(const QString &str) {
+    if (str.trimmed().isEmpty()) return QDateTime();
+    QDateTime dt = QDateTime::fromString(str, Qt::ISODate);
+    if (!dt.isValid()) {
+        dt = QDateTime::fromString(str, "yyyy-MM-dd HH:mm");
+    }
+    if (!dt.isValid()) {
+        dt = QDateTime::fromString(str, "yyyy-MM-dd HH:mm:ss");
+    }
+    if (dt.isValid()) {
+        return dt.toLocalTime();
+    }
+    return QDateTime();
+}
+
 TaskModel::TaskModel(LocalRepository *repo, QObject *parent)
     : QAbstractListModel(parent), m_repo(repo) {
     connect(&m_watcher, &QFutureWatcher<QList<Task>>::finished, this, [this]() {
@@ -49,7 +64,7 @@ QVariantMap TaskModel::selectedTask() const {
         {"isMyDay", t.isMyDay},
         {"importance", t.importance},
         {"dueDate", t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : ""},
-        {"reminderAt", t.reminderAt.isValid() ? t.reminderAt.toString("yyyy-MM-dd HH:mm") : ""},
+        {"reminderAt", t.reminderAt.isValid() ? t.reminderAt.toLocalTime().toString("yyyy-MM-dd HH:mm") : ""},
         {"recurrence", t.recurrence},
         {"steps", stepList}
     };
@@ -78,7 +93,7 @@ QVariant TaskModel::data(const QModelIndex &index, int role) const {
         case IsMyDayRole: return t.isMyDay;
         case DueDateRole: return t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : "";
         case ImportanceRole: return t.importance;
-        case ReminderAtRole: return t.reminderAt.isValid() ? t.reminderAt.toString("yyyy-MM-dd HH:mm") : "";
+        case ReminderAtRole: return t.reminderAt.isValid() ? t.reminderAt.toLocalTime().toString("yyyy-MM-dd HH:mm") : "";
         case RecurrenceRole: return t.recurrence;
         case StepsRole: {
             QVariantList list;
@@ -162,7 +177,7 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
         t.dueDate = QDate::fromString(dueDate, Qt::ISODate);
     }
     if (!reminderAt.isEmpty()) {
-        t.reminderAt = QDateTime::fromString(reminderAt, Qt::ISODate);
+        t.reminderAt = parseDateTimeLocal(reminderAt);
     }
 
     if (m_currentListId == "special-myday") {
@@ -254,8 +269,9 @@ void TaskModel::updateTaskReminder(int row, const QString &reminderAt) {
     if (reminderAt.isEmpty()) {
         m_tasks[row].reminderAt = QDateTime();
     } else {
-        m_tasks[row].reminderAt = QDateTime::fromString(reminderAt, Qt::ISODate);
+        m_tasks[row].reminderAt = parseDateTimeLocal(reminderAt);
     }
+    m_tasks[row].reminded = false;
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[row]);
 }

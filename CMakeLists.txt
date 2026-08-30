@@ -14,6 +14,9 @@ find_package(Qt6Keychain REQUIRED)
 add_library(omado_lib STATIC
     src/core/ThemeReader.cpp
     src/core/Database.cpp
+    src/core/NotificationService.cpp
+    src/core/ReminderService.cpp
+    src/core/DaemonService.cpp
     src/models/LocalRepository.cpp
     src/models/TaskListModel.cpp
     src/models/TaskModel.cpp
@@ -60,3 +63,9 @@ qt_add_qml_module(omado
 )
 
 target_link_libraries(omado PRIVATE omado_lib Qt6::QuickControls2)
+
+option(BUILD_TESTING "Build the testing tree." ON)
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
