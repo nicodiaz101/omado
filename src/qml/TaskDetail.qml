@@ -265,6 +265,7 @@ Rectangle {
 
                 // Due Date Button
                 Rectangle {
+                    id: dueDateBtn
                     Layout.fillWidth: true
                     Layout.preferredHeight: 34
                     radius: 4
@@ -295,39 +296,22 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: detailDateMenu.open()
+                        onClicked: detailDatePicker.open()
                     }
 
-                    Menu {
-                        id: detailDateMenu
-                        MenuItem {
-                            text: qsTr("Today")
-                            onTriggered: {
-                                var d = new Date()
-                                var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
-                                var isoDate = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
-                                TaskModel.updateTaskDueDate(root.selectedIndex, isoDate)
-                            }
-                        }
-                        MenuItem {
-                            text: qsTr("Tomorrow")
-                            onTriggered: {
-                                var d = new Date()
-                                d.setDate(d.getDate() + 1)
-                                var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
-                                var isoDate = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
-                                TaskModel.updateTaskDueDate(root.selectedIndex, isoDate)
-                            }
-                        }
-                        MenuItem {
-                            text: qsTr("Remove due date")
-                            onTriggered: TaskModel.updateTaskDueDate(root.selectedIndex, "")
+                    DatePickerPopup {
+                        id: detailDatePicker
+                        x: parent.width - width
+                        y: parent.height + 4
+                        onDateSelected: function(isoDate) {
+                            TaskModel.updateTaskDueDate(root.selectedIndex, isoDate)
                         }
                     }
                 }
 
                 // Reminder Button
                 Rectangle {
+                    id: reminderBtn
                     Layout.fillWidth: true
                     Layout.preferredHeight: 34
                     radius: 4
@@ -358,49 +342,15 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: detailReminderMenu.open()
+                        onClicked: detailTimePicker.open()
                     }
 
-                    Menu {
-                        id: detailReminderMenu
-                        MenuItem {
-                            text: {
-                                var now = new Date()
-                                if (now.getHours() < 18) return qsTr("Later today (18:00)")
-                                if (now.getHours() < 21) return qsTr("Tonight (21:00)")
-                                return qsTr("Tomorrow afternoon (14:00)")
-                            }
-                            onTriggered: {
-                                var d = new Date()
-                                var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
-                                var h = 18
-                                if (d.getHours() >= 21) {
-                                    d.setDate(d.getDate() + 1)
-                                    h = 14
-                                } else if (d.getHours() >= 18) {
-                                    h = 21
-                                }
-                                var year = d.getFullYear()
-                                var month = pad(d.getMonth() + 1)
-                                var day = pad(d.getDate())
-                                TaskModel.updateTaskReminder(root.selectedIndex, year + "-" + month + "-" + day + "T" + pad(h) + ":00:00")
-                            }
-                        }
-                        MenuItem {
-                            text: qsTr("Tomorrow morning (09:00)")
-                            onTriggered: {
-                                var d = new Date()
-                                d.setDate(d.getDate() + 1)
-                                var pad = function(n) { return n < 10 ? '0' + n : '' + n; }
-                                var year = d.getFullYear()
-                                var month = pad(d.getMonth() + 1)
-                                var day = pad(d.getDate())
-                                TaskModel.updateTaskReminder(root.selectedIndex, year + "-" + month + "-" + day + "T09:00:00")
-                            }
-                        }
-                        MenuItem {
-                            text: qsTr("Remove reminder")
-                            onTriggered: TaskModel.updateTaskReminder(root.selectedIndex, "")
+                    TimePickerPopup {
+                        id: detailTimePicker
+                        x: parent.width - width
+                        y: parent.height + 4
+                        onTimeSelected: function(isoTime) {
+                            TaskModel.updateTaskReminder(root.selectedIndex, isoTime)
                         }
                     }
                 }
