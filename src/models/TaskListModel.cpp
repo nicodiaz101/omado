@@ -1,8 +1,9 @@
 #include "TaskListModel.h"
+#include "GraphClient.h"
 #include <QUuid>
 
-TaskListModel::TaskListModel(LocalRepository *repo, QObject *parent)
-    : QAbstractListModel(parent), m_repo(repo) {
+TaskListModel::TaskListModel(LocalRepository *repo, GraphClient *graph, QObject *parent)
+    : QAbstractListModel(parent), m_repo(repo), m_graph(graph) {
     connect(&m_watcher, &QFutureWatcher<QList<TaskList>>::finished, this, [this]() {
         beginResetModel();
         m_lists = m_watcher.result();
@@ -58,17 +59,32 @@ void TaskListModel::createList(const QString &name) {
     endInsertRows();
 
     m_repo->createList(l.displayName);
+
+    if (m_graph) {
+        m_graph->createList(l.displayName, [this, localId = l.id](bool ok, const QJsonObject &obj, const QString &) {
+            if (ok && m_repo) {
+                QString remoteId = obj.value("id").toString();
+                m_repo->updateListRemoteId(localId, remoteId);
+            }
+        });
+    }
 }
 
 void TaskListModel::deleteList(const QString &id) {
     if (!m_repo || id.isEmpty()) return;
     for (int i = 0; i < m_lists.count(); ++i) {
         if (m_lists[i].id == id && !m_lists[i].isSpecial) {
+            QString remoteId = m_lists[i].remoteId;
             beginRemoveRows(QModelIndex(), i, i);
             m_lists.removeAt(i);
             endRemoveRows();
             m_repo->deleteList(id);
+
+            if (m_graph && !remoteId.isEmpty()) {
+                m_graph->deleteList(remoteId, nullptr);
+            }
             break;
         }
     }
 }
+

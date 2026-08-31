@@ -17,6 +17,10 @@ add_library(omado_lib STATIC
     src/core/NotificationService.cpp
     src/core/ReminderService.cpp
     src/core/DaemonService.cpp
+    src/core/KeychainStore.cpp
+    src/core/AuthManager.cpp
+    src/models/GraphClient.cpp
+    src/core/SyncEngine.cpp
     src/models/LocalRepository.cpp
     src/models/TaskListModel.cpp
     src/models/TaskModel.cpp

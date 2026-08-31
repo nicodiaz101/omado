@@ -9,6 +9,8 @@ set(TEST_TARGETS
     tst_NotificationService
     tst_ReminderService
     tst_DaemonService
+    tst_AuthManager
+    tst_GraphClient
 )
 
 foreach(test_name ${TEST_TARGETS})

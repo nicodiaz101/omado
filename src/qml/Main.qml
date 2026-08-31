@@ -3,6 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import OmaDo.Theme 1.0
 import OmaDo.Models 1.0
+import OmaDo.Sync 1.0
+import OmaDo.Auth 1.0
 
 ApplicationWindow {
     id: window
@@ -47,6 +49,15 @@ ApplicationWindow {
     }
 
     // Keyboard Shortcuts for full productivity
+    Shortcut {
+        sequence: "Ctrl+R"
+        onActivated: {
+            if (AuthManager.isAuthenticated) {
+                SyncEngine.syncNow()
+            }
+        }
+    }
+
     Shortcut {
         sequence: "N"
         onActivated: taskView.inputBar.focusInput()

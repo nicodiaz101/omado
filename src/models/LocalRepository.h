@@ -35,4 +35,13 @@ public:
     QFuture<int> getPendingCount(const QString &listId);
     QFuture<int> getTotalPendingCount();
     QFuture<QList<Task>> getPendingReminders();
+
+    // Sincronización remota
+    QFuture<bool> updateListRemoteId(const QString &listId, const QString &remoteId);
+    QFuture<bool> updateTaskRemoteId(const QString &taskId, const QString &remoteId);
+    QFuture<TaskList> fetchListByRemoteId(const QString &remoteId);
+    QFuture<Task> fetchTaskByRemoteId(const QString &remoteId);
+    QFuture<TaskList> upsertRemoteList(const QString &remoteId, const QString &displayName);
+    QFuture<Task> upsertRemoteTask(const QString &localListId, const Task &task);
 };
+

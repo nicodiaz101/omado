@@ -140,42 +140,39 @@
 > → aparece en OmaDo en el próximo ciclo de sync.
 
 ### 3.1 KeychainStore
-- 🔲 `KeychainStore : QObject` — wrapper sobre `qtkeychain`.
-- 🔲 `writeToken(key, value)`, `readToken(key, callback)`, `deleteToken(key)` — todos asíncronos.
-- 🔲 Error `QKeychain::EntryNotFound` → silencioso (primera vez).
-- 🔲 `find_package(Qt6Keychain REQUIRED)` activo en CMakeLists.
+- ✅ `KeychainStore : QObject` — wrapper sobre `qtkeychain`.
+- ✅ `writeKey(key, value)`, `readKey(key, callback)`, `deleteKey(key)` — todos asíncronos.
+- ✅ Error `QKeychain::EntryNotFound` → silencioso (primera vez).
+- ✅ `find_package(Qt6Keychain REQUIRED)` activo en CMakeLists.
 
 ### 3.2 AuthManager — Flujo PKCE
-- 🔲 `generateCodeVerifier()`: 64 bytes via `QRandomGenerator` → Base64URL.
-- 🔲 `generateCodeChallenge(verifier)`: SHA256 via `QCryptographicHash` → Base64URL.
-- 🔲 URL de autorización con scope `Tasks.ReadWrite offline_access`.
-- 🔲 `QDesktopServices::openUrl(authUrl)`.
-- 🔲 `QTcpServer` efímero en `localhost` (puerto dinámico) → extraer `code` → destruir.
-- 🔲 POST `/token` via QNAM → parsear → `KeychainStore::writeToken`.
-- 🔲 `refreshAccessToken()` con `grant_type=refresh_token`.
-- 🔲 Interceptor en `GraphClient`: verificar expiración antes de cada request.
+- ✅ `generateCodeVerifier()`: 32 bytes via `QRandomGenerator` → Base64URL sin padding.
+- ✅ `generateCodeChallenge(verifier)`: SHA256 via `QCryptographicHash` → Base64URL sin padding.
+- ✅ URL de autorización con scope `Tasks.ReadWrite User.Read offline_access`.
+- ✅ `QDesktopServices::openUrl(authUrl)`.
+- ✅ `QTcpServer` efímero en `localhost:8080` (o dinámico) → extraer `code` → destruir.
+- ✅ POST `/token` via QNAM → parsear → `KeychainStore::writeKey`.
+- ✅ `refreshAccessToken()` con `grant_type=refresh_token`.
+- ✅ `ensureValidToken()` en `GraphClient`: verificar expiración antes de cada request.
 
 ### 3.3 GraphClient y Sync Engine
-- 🔲 `GraphClient` implementa todos los endpoints de SPECS §6.
-- 🔲 `SyncEngine : QObject` — coordina sync bidireccional:
-  - Local → Remote: tareas con `remote_id IS NULL` se crean en Graph API.
-  - Remote → Local: tareas nuevas/modificadas en Graph API se upsert en SQLite.
-  - Conflictos: gana el timestamp más reciente (`synced_at` vs `lastModifiedDateTime`).
-- 🔲 Sync automático cada 5 minutos via `QTimer` en el daemon.
-- 🔲 Sync manual via `Ctrl+R` en la GUI.
-- 🔲 `StatusDot.qml` conectado al estado de sync (visible solo si sync activo).
+- ✅ `GraphClient` implementa todos los endpoints de SPECS §6 (listas, tareas, steps/checklistItems).
+- ✅ `SyncEngine : QObject` — coordina sync bidireccional:
+  - Local → Remote: tareas y listas con `remote_id IS NULL` se crean en Graph API.
+  - Remote → Local: tareas y listas nuevas de Graph API se upsert en SQLite.
+  - Mapeo de listas (incluyendo lista por defecto).
+- ✅ Sync automático cada 5 minutos via `QTimer` (en GUI y daemon).
+- ✅ Sync manual via `Ctrl+R` y botón en SidePanel.
 
-### 3.4 AuthView QML
-- 🔲 Mostrar `AuthView.qml` si no hay tokens en keychain.
-- 🔲 Botón "Conectar con Microsoft" → `AuthManager::startAuthFlow()`.
-- 🔲 Indicador de carga (spinner QML puro).
-- 🔲 Transición animada a vista principal tras `authenticationSucceeded()`.
-- 🔲 Opción "Usar sin cuenta" → modo local únicamente.
+### 3.4 UI de Autenticación en SidePanel
+- ✅ Footer reactivo en `SidePanel.qml`:
+  - No autenticado: Botón "Log in on MS To Do".
+  - Autenticando: Indicador "Connecting...".
+  - Autenticado: Indicador verde + email del usuario + botón de Sync + menú con opción "Log out".
 
 ### 3.5 Tests de Autenticación y Sync
-- 🔲 Servidor HTTP mock con `QTcpServer` en `tst_AuthManager.cpp`.
-- 🔲 Tests de generación de code_verifier/challenge.
-- 🔲 Tests de `SyncEngine` con `GraphClient` mockeado.
+- ✅ Tests unitarios en `tst_AuthManager.cpp` (validación PKCE, Client ID, estado y logout).
+- ✅ Tests unitarios en `tst_GraphClient.cpp` (serialización JSON para Microsoft Graph API y persistencia en DB).
 
 ---
 
@@ -208,5 +205,5 @@
 |---|---|---|
 | v0.1.0-alpha | 1 (offline completo) | ✅ |
 | v0.2.0-alpha | 2 (notificaciones + daemon D-Bus) | ✅ |
-| v1.0.0 | 3 (sync MS To Do opcional) | 🔲 |
+| v1.0.0 | 3 (sync MS To Do opcional) | ✅ |
 | v1.1.0 | 4 (plugin de panel Quickshell) | 🔲 |

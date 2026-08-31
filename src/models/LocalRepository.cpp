@@ -420,3 +420,166 @@ QFuture<QList<Task>> LocalRepository::getPendingReminders() {
         return tasks;
     });
 }
+
+QFuture<bool> LocalRepository::updateListRemoteId(const QString &listId, const QString &remoteId) {
+    return QtConcurrent::run([listId, remoteId]() {
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("UPDATE task_lists SET remote_id = :remote_id, synced_at = :synced_at WHERE id = :id");
+        q.bindValue(":remote_id", remoteId);
+        q.bindValue(":synced_at", QDateTime::currentDateTime().toString(Qt::ISODate));
+        q.bindValue(":id", listId);
+        return q.exec();
+    });
+}
+
+QFuture<bool> LocalRepository::updateTaskRemoteId(const QString &taskId, const QString &remoteId) {
+    return QtConcurrent::run([taskId, remoteId]() {
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("UPDATE tasks SET remote_id = :remote_id, synced_at = :synced_at WHERE id = :id");
+        q.bindValue(":remote_id", remoteId);
+        q.bindValue(":synced_at", QDateTime::currentDateTime().toString(Qt::ISODate));
+        q.bindValue(":id", taskId);
+        return q.exec();
+    });
+}
+
+QFuture<TaskList> LocalRepository::fetchListByRemoteId(const QString &remoteId) {
+    return QtConcurrent::run([remoteId]() {
+        TaskList l;
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
+        q.bindValue(":remote_id", remoteId);
+        if (q.exec() && q.next()) {
+            l = mapToTaskList(q);
+        }
+        return l;
+    });
+}
+
+QFuture<Task> LocalRepository::fetchTaskByRemoteId(const QString &remoteId) {
+    return QtConcurrent::run([remoteId]() {
+        Task t;
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("SELECT * FROM tasks WHERE remote_id = :remote_id LIMIT 1");
+        q.bindValue(":remote_id", remoteId);
+        if (q.exec() && q.next()) {
+            t = mapToTask(q, db);
+        }
+        return t;
+    });
+}
+
+QFuture<TaskList> LocalRepository::upsertRemoteList(const QString &remoteId, const QString &displayName) {
+    return QtConcurrent::run([remoteId, displayName]() {
+        TaskList l;
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
+        q.bindValue(":remote_id", remoteId);
+        if (q.exec() && q.next()) {
+            l = mapToTaskList(q);
+            if (l.displayName != displayName) {
+                l.displayName = displayName;
+                QSqlQuery qu(db);
+                qu.prepare("UPDATE task_lists SET display_name = :name, synced_at = :synced WHERE id = :id");
+                qu.bindValue(":name", displayName);
+                qu.bindValue(":synced", QDateTime::currentDateTime().toString(Qt::ISODate));
+                qu.bindValue(":id", l.id);
+                qu.exec();
+            }
+            return l;
+        }
+
+        // Crear nueva lista local proveniente de remoto
+        l.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        l.displayName = displayName;
+        l.isSpecial = false;
+        l.remoteId = remoteId;
+        l.sortOrder = 10;
+
+        QSqlQuery qi(db);
+        qi.prepare("INSERT INTO task_lists (id, display_name, is_special, sort_order, remote_id, created_at, synced_at) VALUES (:id, :name, 0, :sort, :remote_id, :created, :synced)");
+        qi.bindValue(":id", l.id);
+        qi.bindValue(":name", l.displayName);
+        qi.bindValue(":sort", l.sortOrder);
+        qi.bindValue(":remote_id", l.remoteId);
+        qi.bindValue(":created", QDateTime::currentDateTime().toString(Qt::ISODate));
+        qi.bindValue(":synced", QDateTime::currentDateTime().toString(Qt::ISODate));
+        qi.exec();
+        return l;
+    });
+}
+
+QFuture<Task> LocalRepository::upsertRemoteTask(const QString &localListId, const Task &task) {
+    return QtConcurrent::run([localListId, task]() {
+        Task t = task;
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("SELECT * FROM tasks WHERE remote_id = :remote_id LIMIT 1");
+        q.bindValue(":remote_id", t.remoteId);
+        if (q.exec() && q.next()) {
+            Task existing = mapToTask(q, db);
+            t.id = existing.id;
+            t.listId = existing.listId;
+            // Actualizar campos
+            QSqlQuery qu(db);
+            qu.prepare(R"(
+                UPDATE tasks SET 
+                    title = :title, 
+                    body = :body, 
+                    is_completed = :is_completed, 
+                    importance = :importance,
+                    due_date = :due_date, 
+                    reminder_at = :reminder_at, 
+                    reminded = :reminded,
+                    synced_at = :synced
+                WHERE id = :id
+            )");
+            qu.bindValue(":id", t.id);
+            qu.bindValue(":title", t.title);
+            qu.bindValue(":body", t.body.isNull() ? QStringLiteral("") : t.body);
+            qu.bindValue(":is_completed", t.isCompleted ? 1 : 0);
+            qu.bindValue(":importance", t.importance.isEmpty() ? QStringLiteral("normal") : t.importance);
+            qu.bindValue(":due_date", t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : QVariant());
+            qu.bindValue(":reminder_at", t.reminderAt.isValid() ? t.reminderAt.toLocalTime().toString(Qt::ISODate) : QVariant());
+            qu.bindValue(":reminded", t.reminded ? 1 : 0);
+            qu.bindValue(":synced", QDateTime::currentDateTime().toString(Qt::ISODate));
+            qu.exec();
+            return t;
+        }
+
+        // Insertar nueva tarea desde remoto
+        if (t.id.isEmpty()) t.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        t.listId = localListId;
+        if (!t.createdAt.isValid()) t.createdAt = QDateTime::currentDateTime();
+
+        QSqlQuery qi(db);
+        qi.prepare(R"(
+            INSERT INTO tasks (id, list_id, title, body, is_completed, is_my_day, importance, due_date, reminder_at, reminded, recurrence, sort_order, created_at, synced_at, remote_id)
+            VALUES (:id, :list_id, :title, :body, :is_completed, :is_my_day, :importance, :due_date, :reminder_at, :reminded, :recurrence, :sort_order, :created_at, :synced_at, :remote_id)
+        )");
+        qi.bindValue(":id", t.id);
+        qi.bindValue(":list_id", t.listId);
+        qi.bindValue(":title", t.title);
+        qi.bindValue(":body", t.body.isNull() ? QStringLiteral("") : t.body);
+        qi.bindValue(":is_completed", t.isCompleted ? 1 : 0);
+        qi.bindValue(":is_my_day", t.isMyDay ? 1 : 0);
+        qi.bindValue(":importance", t.importance.isEmpty() ? QStringLiteral("normal") : t.importance);
+        qi.bindValue(":due_date", t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : QVariant());
+        qi.bindValue(":reminder_at", t.reminderAt.isValid() ? t.reminderAt.toLocalTime().toString(Qt::ISODate) : QVariant());
+        qi.bindValue(":reminded", t.reminded ? 1 : 0);
+        qi.bindValue(":recurrence", t.recurrence.isEmpty() ? QStringLiteral("none") : t.recurrence);
+        qi.bindValue(":sort_order", t.sortOrder);
+        qi.bindValue(":created_at", t.createdAt.toString(Qt::ISODate));
+        qi.bindValue(":synced_at", QDateTime::currentDateTime().toString(Qt::ISODate));
+        qi.bindValue(":remote_id", t.remoteId);
+        qi.exec();
+
+        return t;
+    });
+}
+

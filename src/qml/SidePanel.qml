@@ -3,6 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import OmaDo.Theme 1.0
 import OmaDo.Models 1.0
+import OmaDo.Auth 1.0
+import OmaDo.Sync 1.0
 import "components"
 
 Rectangle {
@@ -111,6 +113,14 @@ Rectangle {
                         visible: TaskModel.currentListId === model.id
                     }
 
+                    MouseArea {
+                        id: mouseAreaList
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: TaskModel.currentListId = model.id
+                    }
+
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 16
@@ -134,20 +144,23 @@ Rectangle {
 
                         // Delete list button (hover)
                         Item {
-                            width: 20
-                            height: 20
-                            visible: mouseAreaList.containsMouse
+                            z: 2
+                            width: 24
+                            height: 24
+                            visible: mouseAreaList.containsMouse || mouseAreaTrash.containsMouse
 
                             AppIcon {
                                 anchors.centerIn: parent
                                 name: "trash"
                                 size: 13
-                                color: Theme.foreground
-                                opacity: 0.6
+                                color: mouseAreaTrash.containsMouse ? Theme.accent : Theme.foreground
+                                opacity: mouseAreaTrash.containsMouse ? 1.0 : 0.6
                             }
 
                             MouseArea {
+                                id: mouseAreaTrash
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     if (TaskModel.currentListId === model.id) {
@@ -157,14 +170,6 @@ Rectangle {
                                 }
                             }
                         }
-                    }
-
-                    MouseArea {
-                        id: mouseAreaList
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: TaskModel.currentListId = model.id
                     }
                 }
             }
@@ -222,10 +227,11 @@ Rectangle {
             Layout.fillWidth: true
         }
 
-        // Footer: Login to MS To Do
-        Item {
+        // Footer: Login / Sync / User Info
+        Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
+            color: mouseAreaFooter.containsMouse ? Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.04) : "transparent"
 
             RowLayout {
                 anchors.fill: parent
@@ -233,21 +239,86 @@ Rectangle {
                 anchors.rightMargin: 16
                 spacing: 8
 
+                // Indicator dot (Green when connected, Accent when authenticating)
+                Rectangle {
+                    width: 8
+                    height: 8
+                    radius: 4
+                    color: AuthManager.isAuthenticated ? "#4CAF50" : (AuthManager.isAuthenticating ? Theme.accent : "transparent")
+                    visible: AuthManager.isAuthenticated || AuthManager.isAuthenticating
+                }
+
                 Text {
                     Layout.fillWidth: true
-                    text: qsTr("Log in on MS To Do")
-                    color: Theme.accent
+                    text: {
+                        if (AuthManager.isAuthenticating) {
+                            return qsTr("Connecting...")
+                        }
+                        if (AuthManager.isAuthenticated) {
+                            if (SyncEngine.isSyncing) return qsTr("Syncing...")
+                            return AuthManager.userEmail !== "" ? AuthManager.userEmail : (AuthManager.userName !== "" ? AuthManager.userName : qsTr("Connected"))
+                        }
+                        return qsTr("Log in on MS To Do")
+                    }
+                    color: AuthManager.isAuthenticated ? Theme.foreground : Theme.accent
+                    opacity: AuthManager.isAuthenticated ? 0.8 : 1.0
                     font.family: "iA Writer Mono"
-                    font.pixelSize: 12
-                    font.bold: true
+                    font.pixelSize: 11
+                    font.bold: !AuthManager.isAuthenticated
+                    elide: Text.ElideRight
+                }
+
+                // Sync button when authenticated
+                Item {
+                    width: 20
+                    height: 20
+                    visible: AuthManager.isAuthenticated
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        name: "repeat"
+                        size: 13
+                        color: SyncEngine.isSyncing ? Theme.accent : Theme.foreground
+                        opacity: SyncEngine.isSyncing ? 1.0 : (mouseAreaSync.containsMouse ? 0.9 : 0.5)
+                    }
+
+                    MouseArea {
+                        id: mouseAreaSync
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            SyncEngine.syncNow()
+                        }
+                    }
                 }
             }
 
             MouseArea {
+                id: mouseAreaFooter
                 anchors.fill: parent
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    // Auth flow trigger (Hito 3)
+                    if (AuthManager.isAuthenticated) {
+                        userMenu.open()
+                    } else if (!AuthManager.isAuthenticating) {
+                        AuthManager.startLogin()
+                    }
+                }
+            }
+
+            Menu {
+                id: userMenu
+                y: -height - 4
+
+                MenuItem {
+                    text: qsTr("Sync now (Ctrl+R)")
+                    onTriggered: SyncEngine.syncNow()
+                }
+                MenuItem {
+                    text: qsTr("Log out")
+                    onTriggered: AuthManager.logout()
                 }
             }
         }
