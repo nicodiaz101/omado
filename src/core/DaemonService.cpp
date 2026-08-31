@@ -36,13 +36,13 @@ bool DaemonService::registerService() {
     bool objRegistered = m_connection.registerObject(
         QStringLiteral("/io/omarchy/OmaDo"),
         this,
-        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals
+        QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals
     );
 
     m_connection.registerObject(
         QStringLiteral("/"),
         this,
-        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals
+        QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals
     );
 
     if (!objRegistered) {

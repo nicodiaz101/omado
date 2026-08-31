@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcessEnvironment>
+#include <QUuid>
 #include <QDebug>
 
 AuthManager::AuthManager(KeychainStore *keychain, QObject *parent)
@@ -101,6 +102,7 @@ void AuthManager::startLogin() {
     m_codeVerifier = generateCodeVerifier();
     QString challenge = generateCodeChallenge(m_codeVerifier);
     QString redirectUri = QStringLiteral("http://localhost:%1").arg(port);
+    m_state = QUuid::createUuid().toString(QUuid::WithoutBraces);
 
     QUrl url(kAuthEndpoint);
     QUrlQuery query;
@@ -111,6 +113,7 @@ void AuthManager::startLogin() {
     query.addQueryItem("scope", kScopes);
     query.addQueryItem("code_challenge", challenge);
     query.addQueryItem("code_challenge_method", "S256");
+    query.addQueryItem("state", m_state);
     url.setQuery(query);
 
     m_isAuthenticating = true;
@@ -139,6 +142,13 @@ void AuthManager::handleNewConnection() {
         QString code = query.queryItemValue("code");
         QString error = query.queryItemValue("error");
         QString errorDesc = query.queryItemValue("error_description");
+        QString state = query.queryItemValue("state");
+
+        if (state != m_state || m_state.isEmpty()) {
+            error = "invalid_state";
+            errorDesc = "El parámetro state no coincide o es inválido. Posible ataque CSRF.";
+            code.clear();
+        }
 
         QString responseHtml = QStringLiteral(
             "HTTP/1.1 200 OK\r\n"

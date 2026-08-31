@@ -63,6 +63,7 @@ private:
     QDateTime               m_tokenExpiry;
     QString                 m_userEmail;
     QString                 m_userName;
+    QString                 m_state;
 
     bool                    m_isAuthenticated = false;
     bool                    m_isAuthenticating = false;
