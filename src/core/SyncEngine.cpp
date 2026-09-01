@@ -6,22 +6,28 @@
 #include <memory>
 
 SyncEngine::SyncEngine(AuthManager *auth, GraphClient *graph, LocalRepository *repo, QObject *parent)
-    : QObject(parent), m_auth(auth), m_graph(graph), m_repo(repo), m_timer(new QTimer(this)) {
+    : QObject(parent), m_auth(auth), m_graph(graph), m_repo(repo), m_timer(new QTimer(this)), m_debounceTimer(new QTimer(this)) {
     
+    m_debounceTimer->setSingleShot(true);
+    connect(m_debounceTimer, &QTimer::timeout, this, &SyncEngine::syncNow);
     connect(m_timer, &QTimer::timeout, this, &SyncEngine::syncNow);
 
     if (m_auth) {
         connect(m_auth, &AuthManager::authSuccess, this, [this]() {
             startPeriodicSync();
-            syncNow();
+            scheduleSync(100);
         });
         connect(m_auth, &AuthManager::authStatusChanged, this, [this]() {
-            if (!m_auth->isAuthenticated()) {
+            if (m_auth->isAuthenticated()) {
+                startPeriodicSync();
+                scheduleSync(100);
+            } else {
                 stopPeriodicSync();
             }
         });
         if (m_auth->isAuthenticated()) {
             startPeriodicSync();
+            scheduleSync(100);
         }
     }
 }
@@ -37,6 +43,14 @@ void SyncEngine::stopPeriodicSync() {
     if (m_timer->isActive()) {
         m_timer->stop();
         qDebug() << "[SyncEngine] Sincronización periódica detenida";
+    }
+}
+
+void SyncEngine::scheduleSync(int delayMs) {
+    if (!m_auth || !m_auth->isAuthenticated()) return;
+    if (m_debounceTimer) {
+        m_debounceTimer->stop();
+        m_debounceTimer->start(delayMs);
     }
 }
 

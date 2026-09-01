@@ -88,8 +88,8 @@ int main(int argc, char *argv[])
     GraphClient *graphClient = new GraphClient(authManager, &app);
     SyncEngine *syncEngine = new SyncEngine(authManager, graphClient, repo, &app);
 
-    TaskListModel *listModel = new TaskListModel(repo, graphClient, &app);
-    TaskModel *taskModel = new TaskModel(repo, &app);
+    TaskListModel *listModel = new TaskListModel(repo, graphClient, syncEngine, &app);
+    TaskModel *taskModel = new TaskModel(repo, graphClient, syncEngine, &app);
 
     QObject::connect(syncEngine, &SyncEngine::syncFinished, listModel, [listModel, taskModel](bool ok, const QString &) {
         if (ok) {

@@ -4,6 +4,9 @@
 #include <QVariantMap>
 #include "LocalRepository.h"
 
+class GraphClient;
+class SyncEngine;
+
 class TaskModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QString currentListId READ currentListId WRITE setCurrentListId NOTIFY currentListIdChanged)
@@ -29,11 +32,14 @@ public:
         CompletedStepsCountRole
     };
     
-    explicit TaskModel(LocalRepository *repo, QObject *parent = nullptr);
+    explicit TaskModel(LocalRepository *repo, GraphClient *graph = nullptr, SyncEngine *sync = nullptr, QObject *parent = nullptr);
     
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
+
+    void setGraphClient(GraphClient *graph) { m_graph = graph; }
+    void setSyncEngine(SyncEngine *sync) { m_sync = sync; }
 
     QString currentListId() const { return m_currentListId; }
     void setCurrentListId(const QString &id);
@@ -66,7 +72,9 @@ signals:
     void countChanged();
 
 private:
-    LocalRepository *m_repo;
+    LocalRepository *m_repo = nullptr;
+    GraphClient     *m_graph = nullptr;
+    SyncEngine      *m_sync = nullptr;
     QString m_currentListId;
     int m_selectedIndex = -1;
     QList<Task> m_tasks;

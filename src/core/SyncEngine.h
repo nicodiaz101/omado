@@ -19,6 +19,7 @@ public:
     QDateTime lastSyncedAt() const { return m_lastSyncedAt; }
 
     Q_INVOKABLE void syncNow();
+    Q_INVOKABLE void scheduleSync(int delayMs = 500);
     void startPeriodicSync(int intervalMs = 300000); // 5 minutos por defecto
     void stopPeriodicSync();
 
@@ -36,6 +37,7 @@ private:
     GraphClient     *m_graph = nullptr;
     LocalRepository *m_repo = nullptr;
     QTimer          *m_timer = nullptr;
+    QTimer          *m_debounceTimer = nullptr;
 
     bool             m_isSyncing = false;
     QDateTime        m_lastSyncedAt;

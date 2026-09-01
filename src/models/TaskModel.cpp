@@ -1,4 +1,6 @@
 #include "TaskModel.h"
+#include "GraphClient.h"
+#include "../core/SyncEngine.h"
 #include <QUuid>
 #include <QDebug>
 
@@ -17,8 +19,8 @@ static QDateTime parseDateTimeLocal(const QString &str) {
     return QDateTime();
 }
 
-TaskModel::TaskModel(LocalRepository *repo, QObject *parent)
-    : QAbstractListModel(parent), m_repo(repo) {
+TaskModel::TaskModel(LocalRepository *repo, GraphClient *graph, SyncEngine *sync, QObject *parent)
+    : QAbstractListModel(parent), m_repo(repo), m_graph(graph), m_sync(sync) {
     connect(&m_watcher, &QFutureWatcher<QList<Task>>::finished, this, [this]() {
         beginResetModel();
         m_tasks = m_watcher.result();
@@ -210,6 +212,9 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
     emit countChanged();
     
     m_repo->createTask(t);
+    if (m_sync) {
+        m_sync->scheduleSync(300);
+    }
 }
 
 void TaskModel::toggleTaskCompletion(int row) {
@@ -223,6 +228,16 @@ void TaskModel::toggleTaskCompletion(int row) {
     }
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[row]);
+
+    if (m_graph && !m_tasks[row].remoteId.isEmpty() && m_repo) {
+        QString remoteListId = m_repo->getListRemoteId(m_tasks[row].listId);
+        if (!remoteListId.isEmpty()) {
+            m_graph->updateTask(remoteListId, m_tasks[row], nullptr);
+        }
+    }
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::toggleTaskImportance(int row) {
@@ -230,6 +245,16 @@ void TaskModel::toggleTaskImportance(int row) {
     m_tasks[row].importance = (m_tasks[row].importance == "high") ? "normal" : "high";
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[row]);
+
+    if (m_graph && !m_tasks[row].remoteId.isEmpty() && m_repo) {
+        QString remoteListId = m_repo->getListRemoteId(m_tasks[row].listId);
+        if (!remoteListId.isEmpty()) {
+            m_graph->updateTask(remoteListId, m_tasks[row], nullptr);
+        }
+    }
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::toggleTaskMyDay(int row) {
@@ -237,6 +262,9 @@ void TaskModel::toggleTaskMyDay(int row) {
     m_tasks[row].isMyDay = !m_tasks[row].isMyDay;
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[row]);
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::updateTaskTitle(int row, const QString &title) {
@@ -244,6 +272,16 @@ void TaskModel::updateTaskTitle(int row, const QString &title) {
     m_tasks[row].title = title.trimmed();
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[row]);
+
+    if (m_graph && !m_tasks[row].remoteId.isEmpty() && m_repo) {
+        QString remoteListId = m_repo->getListRemoteId(m_tasks[row].listId);
+        if (!remoteListId.isEmpty()) {
+            m_graph->updateTask(remoteListId, m_tasks[row], nullptr);
+        }
+    }
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::updateTaskBody(int row, const QString &body) {
@@ -251,6 +289,16 @@ void TaskModel::updateTaskBody(int row, const QString &body) {
     m_tasks[row].body = body;
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[row]);
+
+    if (m_graph && !m_tasks[row].remoteId.isEmpty() && m_repo) {
+        QString remoteListId = m_repo->getListRemoteId(m_tasks[row].listId);
+        if (!remoteListId.isEmpty()) {
+            m_graph->updateTask(remoteListId, m_tasks[row], nullptr);
+        }
+    }
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::updateTaskDueDate(int row, const QString &dueDate) {
@@ -262,6 +310,16 @@ void TaskModel::updateTaskDueDate(int row, const QString &dueDate) {
     }
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[row]);
+
+    if (m_graph && !m_tasks[row].remoteId.isEmpty() && m_repo) {
+        QString remoteListId = m_repo->getListRemoteId(m_tasks[row].listId);
+        if (!remoteListId.isEmpty()) {
+            m_graph->updateTask(remoteListId, m_tasks[row], nullptr);
+        }
+    }
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::updateTaskReminder(int row, const QString &reminderAt) {
@@ -274,12 +332,25 @@ void TaskModel::updateTaskReminder(int row, const QString &reminderAt) {
     m_tasks[row].reminded = false;
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[row]);
+
+    if (m_graph && !m_tasks[row].remoteId.isEmpty() && m_repo) {
+        QString remoteListId = m_repo->getListRemoteId(m_tasks[row].listId);
+        if (!remoteListId.isEmpty()) {
+            m_graph->updateTask(remoteListId, m_tasks[row], nullptr);
+        }
+    }
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::deleteTask(int row) {
     if (row < 0 || row >= m_tasks.count() || !m_repo) return;
     
     QString taskId = m_tasks[row].id;
+    QString remoteId = m_tasks[row].remoteId;
+    QString listId = m_tasks[row].listId;
+
     beginRemoveRows(QModelIndex(), row, row);
     m_tasks.removeAt(row);
     if (m_selectedIndex == row) {
@@ -294,6 +365,16 @@ void TaskModel::deleteTask(int row) {
     emit countChanged();
 
     m_repo->deleteTask(taskId);
+
+    if (m_graph && !remoteId.isEmpty() && m_repo) {
+        QString remoteListId = m_repo->getListRemoteId(listId);
+        if (!remoteListId.isEmpty()) {
+            m_graph->deleteTask(remoteListId, remoteId, nullptr);
+        }
+    }
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::addStep(int row, const QString &stepTitle) {

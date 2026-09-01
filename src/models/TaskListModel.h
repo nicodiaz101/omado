@@ -4,6 +4,7 @@
 #include "LocalRepository.h"
 
 class GraphClient;
+class SyncEngine;
 
 class TaskListModel : public QAbstractListModel {
     Q_OBJECT
@@ -16,13 +17,14 @@ public:
         PendingCountRole 
     };
     
-    explicit TaskListModel(LocalRepository *repo, GraphClient *graph = nullptr, QObject *parent = nullptr);
+    explicit TaskListModel(LocalRepository *repo, GraphClient *graph = nullptr, SyncEngine *sync = nullptr, QObject *parent = nullptr);
     
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
     void setGraphClient(GraphClient *graph) { m_graph = graph; }
+    void setSyncEngine(SyncEngine *sync) { m_sync = sync; }
 
     Q_INVOKABLE void loadLists();
     Q_INVOKABLE void createList(const QString &name);
@@ -31,6 +33,7 @@ public:
 private:
     LocalRepository *m_repo = nullptr;
     GraphClient     *m_graph = nullptr;
+    SyncEngine      *m_sync = nullptr;
     QList<TaskList>  m_lists;
     QFutureWatcher<QList<TaskList>> m_watcher;
 };

@@ -308,17 +308,148 @@ Rectangle {
                 }
             }
 
-            Menu {
+            Popup {
                 id: userMenu
-                y: -height - 4
+                x: 8
+                y: -height - 8
+                width: root.width - 16
+                padding: 6
+                modal: false
+                focus: true
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-                MenuItem {
-                    text: qsTr("Sync now (Ctrl+R)")
-                    onTriggered: SyncEngine.syncNow()
+                background: Rectangle {
+                    radius: 8
+                    color: Theme.surface
+                    border.color: Theme.border
+                    border.width: 1
                 }
-                MenuItem {
-                    text: qsTr("Log out")
-                    onTriggered: AuthManager.logout()
+
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 3
+
+                    // Header with account email
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 8
+                        Layout.rightMargin: 8
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 2
+                        spacing: 2
+
+                        Text {
+                            text: qsTr("Microsoft Account")
+                            color: Theme.foreground
+                            opacity: 0.45
+                            font.family: "iA Writer Mono"
+                            font.pixelSize: 10
+                            font.bold: true
+                            font.capitalization: Font.AllUppercase
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: AuthManager.userEmail !== "" ? AuthManager.userEmail : (AuthManager.userName !== "" ? AuthManager.userName : qsTr("Connected"))
+                            color: Theme.foreground
+                            font.family: "iA Writer Mono"
+                            font.pixelSize: 12
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    SectionSeparator {
+                        Layout.fillWidth: true
+                    }
+
+                    // Sync now action
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 32
+                        radius: 6
+                        color: mouseAreaMenuSync.containsMouse ? Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.08) : "transparent"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 8
+
+                            AppIcon {
+                                name: "repeat"
+                                size: 14
+                                color: Theme.accent
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: qsTr("Sync now")
+                                color: Theme.foreground
+                                font.family: "iA Writer Mono"
+                                font.pixelSize: 12
+                            }
+
+                            Text {
+                                text: "Ctrl+R"
+                                color: Theme.foreground
+                                opacity: 0.4
+                                font.family: "iA Writer Mono"
+                                font.pixelSize: 10
+                            }
+                        }
+
+                        MouseArea {
+                            id: mouseAreaMenuSync
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                userMenu.close()
+                                SyncEngine.syncNow()
+                            }
+                        }
+                    }
+
+                    // Log out action
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 32
+                        radius: 6
+                        color: mouseAreaMenuLogout.containsMouse ? Qt.rgba(1.0, 0.33, 0.33, 0.12) : "transparent"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 8
+
+                            AppIcon {
+                                name: "close"
+                                size: 14
+                                color: "#ff5555"
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: qsTr("Log out")
+                                color: "#ff5555"
+                                font.family: "iA Writer Mono"
+                                font.pixelSize: 12
+                            }
+                        }
+
+                        MouseArea {
+                            id: mouseAreaMenuLogout
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                userMenu.close()
+                                AuthManager.logout()
+                            }
+                        }
+                    }
                 }
             }
         }

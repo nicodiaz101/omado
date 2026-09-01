@@ -1,9 +1,10 @@
 #include "TaskListModel.h"
 #include "GraphClient.h"
+#include "../core/SyncEngine.h"
 #include <QUuid>
 
-TaskListModel::TaskListModel(LocalRepository *repo, GraphClient *graph, QObject *parent)
-    : QAbstractListModel(parent), m_repo(repo), m_graph(graph) {
+TaskListModel::TaskListModel(LocalRepository *repo, GraphClient *graph, SyncEngine *sync, QObject *parent)
+    : QAbstractListModel(parent), m_repo(repo), m_graph(graph), m_sync(sync) {
     connect(&m_watcher, &QFutureWatcher<QList<TaskList>>::finished, this, [this]() {
         beginResetModel();
         m_lists = m_watcher.result();
@@ -68,6 +69,9 @@ void TaskListModel::createList(const QString &name) {
             }
         });
     }
+    if (m_sync) {
+        m_sync->scheduleSync(500);
+    }
 }
 
 void TaskListModel::deleteList(const QString &id) {
@@ -82,6 +86,9 @@ void TaskListModel::deleteList(const QString &id) {
 
             if (m_graph && !remoteId.isEmpty()) {
                 m_graph->deleteList(remoteId, nullptr);
+            }
+            if (m_sync) {
+                m_sync->scheduleSync(500);
             }
             break;
         }

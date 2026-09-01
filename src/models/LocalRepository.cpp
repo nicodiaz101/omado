@@ -421,6 +421,17 @@ QFuture<QList<Task>> LocalRepository::getPendingReminders() {
     });
 }
 
+QString LocalRepository::getListRemoteId(const QString &localListId) {
+    QSqlDatabase db = getThreadDb();
+    QSqlQuery q(db);
+    q.prepare("SELECT remote_id FROM task_lists WHERE id = :id LIMIT 1");
+    q.bindValue(":id", localListId);
+    if (q.exec() && q.next()) {
+        return q.value("remote_id").toString();
+    }
+    return QString();
+}
+
 QFuture<bool> LocalRepository::updateListRemoteId(const QString &listId, const QString &remoteId) {
     return QtConcurrent::run([listId, remoteId]() {
         QSqlDatabase db = getThreadDb();
