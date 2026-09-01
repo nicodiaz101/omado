@@ -57,6 +57,7 @@ qt_add_qml_module(omado
         icons/calendar.svg
         icons/close.svg
         icons/list.svg
+        icons/omado.svg
         icons/plus.svg
         icons/repeat.svg
         icons/star.svg
@@ -67,6 +68,14 @@ qt_add_qml_module(omado
 )
 
 target_link_libraries(omado PRIVATE omado_lib Qt6::QuickControls2)
+
+# Installation targets
+include(GNUInstallDirs)
+install(TARGETS omado RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES icons/omado.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+install(FILES omado.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES autostart/omado-daemon.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES systemd/omado.service DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/user OPTIONAL)
 
 option(BUILD_TESTING "Build the testing tree." ON)
 if(BUILD_TESTING)

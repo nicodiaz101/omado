@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OmaDo
+GenericName=Task Manager
+Comment=Lightweight native task manager with Microsoft To Do sync
+Exec=omado
+Icon=omado
+Terminal=false
+Categories=Office;ProjectManagement;Utility;
+Keywords=todo;tasks;todoist;microsoft;reminders;omado;
+StartupWMClass=omado
