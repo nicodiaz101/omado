@@ -53,24 +53,24 @@ I love Omarchy, but I have Samsung devices. Samsung Reminders is a beatiful and 
 ## 🛠 Installation Guide
 
 ### Option 1: Quick Automated Install (Recommended)
-Clonás el repositorio y ejecutás el script instalador:
+Clone the repository and run the installer script:
 ```bash
 git clone https://github.com/nicodiaz101/omado.git
 cd omado
 ./install.sh
 ```
-> El script compilará la app e instalará el binario, el icono oficial y el acceso directo `.desktop` en tu entorno.
+> The script will build the application and install the binary, the official icon, and the `.desktop` launcher in your user environment.
 
 ---
 
 ### Option 2: Native Arch Package (`makepkg` / `pacman`)
-Podés compilarlo e instalarlo como cualquier paquete de Arch Linux:
+You can build and install it as a native Arch Linux package:
 ```bash
 git clone https://github.com/nicodiaz101/omado.git
 cd omado
 makepkg -si
 ```
-> Esto lo registra en tu base de datos de `pacman`, permitiéndote gestionarlo o desinstalarlo con `sudo pacman -R omado-git`.
+> This registers OmaDo in your `pacman` database, allowing you to manage or remove it anytime with `sudo pacman -R omado-git`.
 
 ---
 
