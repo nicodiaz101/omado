@@ -38,10 +38,12 @@ I love Omarchy, but I have Samsung devices. Samsung Reminders is a beatiful and 
 - [x] Full D-Bus IPC service (`io.omarchy.OmaDo`) exporting lists, today tasks, pending counts, and reactive signals.
 - [x] Auto-start desktop entry (`autostart/omado-daemon.desktop`) and systemd user unit (`systemd/omado.service`).
 
-### 🔲 Milestone 3: Microsoft To Do Cloud Synchronization
-- [ ] OAuth 2.0 PKCE authentication with Microsoft Entra ID (no client secrets).
-- [ ] Secure token storage using system keyring via `qtkeychain-qt6` / `libsecret`.
-- [ ] Bidirectional sync engine using Microsoft Graph API (`/me/todo/lists`).
+### ✅ Milestone 3: Microsoft To Do Cloud Synchronization (Completed)
+- [x] OAuth 2.0 PKCE authentication with Microsoft Entra ID (RFC 7636 compliant, no client secrets, CSRF-protected).
+- [x] Secure token storage using system keyring via `qtkeychain-qt6` (`gnome-keyring` / `libsecret`).
+- [x] Full Microsoft Graph REST client (`/v1.0/me/todo/` CRUD for lists, tasks, and checklist items).
+- [x] Bidirectional sync engine (startup sync, 5-minute background sync, and debounced instant sync on task mutations).
+- [x] Reactive connection footer and Omarchy-styled account management popup.
 
 ### 🔲 Milestone 4: Quickshell Panel Plugin (v1.1)
 - [ ] Dedicated panel widget (`omado-panel`) communicating with OmaDo via D-Bus (`io.omarchy.OmaDo`).
@@ -76,8 +78,9 @@ cmake --build .
 | `N` | Focus new task input bar |
 | `Space` | Toggle completion on selected task |
 | `Delete` | Delete selected task |
+| `Ctrl+R` | Manual cloud sync with Microsoft To Do |
 | `↑` / `↓` | Navigate task list |
-| `Escape` | Close task detail drawer |
+| `Escape` | Close task detail drawer / popups |
 | `Ctrl+Q` | Quit application |
 
 ---
