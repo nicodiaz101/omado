@@ -9,7 +9,7 @@ license=('GPL3')
 depends=(
     'qt6-base'
     'qt6-declarative'
-    'qt6-quickcontrols2'
+    'qt6-svg'
     'qtkeychain-qt6'
 )
 makedepends=(

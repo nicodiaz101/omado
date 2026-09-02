@@ -76,7 +76,7 @@ makepkg -si
 
 ### Option 3: Manual Build from Source
 ```bash
-sudo pacman -S --needed cmake gcc git qt6-base qt6-declarative qt6-quickcontrols2 qtkeychain-qt6
+sudo pacman -S --needed cmake gcc git qt6-base qt6-declarative qt6-svg qtkeychain-qt6
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . -j$(nproc)

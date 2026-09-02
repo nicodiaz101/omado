@@ -23,7 +23,7 @@ if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
     echo -e "${YELLOW}Faltan dependencias para compilar: ${MISSING_DEPS[*]}${NC}"
     if command -v pacman &> /dev/null; then
         echo -e "${BLUE}Instalando dependencias con pacman...${NC}"
-        sudo pacman -S --needed --noconfirm cmake gcc git qt6-base qt6-declarative qt6-quickcontrols2 qtkeychain-qt6
+        sudo pacman -S --needed --noconfirm cmake gcc git qt6-base qt6-declarative qt6-svg qtkeychain-qt6
     else
         echo -e "${RED}Por favor instalá las dependencias necesarias antes de continuar.${NC}"
         exit 1
