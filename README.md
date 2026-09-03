@@ -2,6 +2,10 @@
 
 An ultra-lightweight, native tasks manager with support for **Microsoft To Do** Sync. Designed specifically for **Omarchy**.
 
+https://github.com/user-attachments/assets/3a419c44-0693-410c-b356-73b26e30a7de
+
+
+
 ---
 
 ## ✨ Features & Philosophy
