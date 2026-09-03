@@ -6,4 +6,5 @@ Exec=omado --daemon
 Icon=omado
 Terminal=false
 Categories=Utility;
+NoDisplay=true
 X-GNOME-Autostart-enabled=true

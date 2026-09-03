@@ -48,5 +48,12 @@ else
     cp ../systemd/omado.service "$HOME/.config/systemd/user/" 2>/dev/null || true
 fi
 
+# Clean up obsolete daemon shortcut from application launcher if present
+rm -f "$HOME/.local/share/applications/omado-daemon.desktop"
+if [ "$EUID" -eq 0 ]; then
+    rm -f /usr/share/applications/omado-daemon.desktop
+    rm -f /usr/local/share/applications/omado-daemon.desktop
+fi
+
 echo -e "\n${GREEN}✓ ¡OmaDo se instaló correctamente!${NC}"
 echo -e "Podés abrirlo desde el ${BLUE}menú de aplicaciones de Omarchy${NC} o ejecutando '${BLUE}omado${NC}' en la terminal."

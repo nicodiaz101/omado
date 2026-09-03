@@ -39,4 +39,6 @@ build() {
 package() {
     cd "$srcdir/omado"
     DESTDIR="$pkgdir" cmake --install build
+    # Ensure daemon desktop file is never placed in applications
+    rm -f "$pkgdir/usr/share/applications/omado-daemon.desktop"
 }

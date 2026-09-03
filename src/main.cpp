@@ -107,6 +107,9 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("OmaDo.Theme", 1, 0, "Theme", themeReader);
 
     QQmlApplicationEngine engine;
+    engine.addImportPath(":/");
+    engine.addImportPath(":/qt/qml");
+
     QObject::connect(
         &engine,
         &QQmlApplicationEngine::objectCreationFailed,

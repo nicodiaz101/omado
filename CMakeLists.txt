@@ -74,7 +74,7 @@ include(GNUInstallDirs)
 install(TARGETS omado RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES icons/omado.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 install(FILES omado.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES autostart/omado-daemon.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES autostart/omado-daemon.desktop DESTINATION /etc/xdg/autostart OPTIONAL)
 install(FILES systemd/omado.service DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/user OPTIONAL)
 
 option(BUILD_TESTING "Build the testing tree." ON)
