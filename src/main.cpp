@@ -49,6 +49,8 @@ int main(int argc, char *argv[])
         SyncEngine syncEngine(&authManager, &graphClient, &repo);
 
         DaemonService daemonService(&repo);
+        QObject::connect(&daemonService, &DaemonService::SyncRequested, &syncEngine, &SyncEngine::syncNow);
+
         if (!daemonService.registerService()) {
             qWarning() << "[Daemon] No se pudo registrar el servicio D-Bus";
             return 1;
@@ -79,17 +81,15 @@ int main(int argc, char *argv[])
     }
 
     LocalRepository *repo = new LocalRepository(&app);
-    NotificationService *notifier = new NotificationService(&app);
-    ReminderService *reminderService = new ReminderService(repo, notifier, &app);
-    reminderService->start();
-
+    // En modo UI no instanciamos servicios pesados en segundo plano (Graph, Reminder),
+    // dependemos de la base de datos y de D-Bus para comunicarnos con el daemon.
+    
     KeychainStore *keychain = new KeychainStore(&app);
     AuthManager *authManager = new AuthManager(keychain, &app);
-    GraphClient *graphClient = new GraphClient(authManager, &app);
-    SyncEngine *syncEngine = new SyncEngine(authManager, graphClient, repo, &app);
+    SyncEngine *syncEngine = new SyncEngine(authManager, nullptr, repo, &app);
 
-    TaskListModel *listModel = new TaskListModel(repo, graphClient, syncEngine, &app);
-    TaskModel *taskModel = new TaskModel(repo, graphClient, syncEngine, &app);
+    TaskListModel *listModel = new TaskListModel(repo, nullptr, syncEngine, &app);
+    TaskModel *taskModel = new TaskModel(repo, nullptr, syncEngine, &app);
 
     QObject::connect(syncEngine, &SyncEngine::syncFinished, listModel, [listModel, taskModel](bool ok, const QString &) {
         if (ok) {

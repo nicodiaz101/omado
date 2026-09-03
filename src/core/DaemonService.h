@@ -26,10 +26,12 @@ public slots:
     Q_SCRIPTABLE int GetPendingCount(const QString &listId);
     Q_SCRIPTABLE int GetTotalPendingCount();
     Q_SCRIPTABLE bool ToggleTask(const QString &taskId, bool completed);
+    Q_SCRIPTABLE void RequestSync();
 
 signals:
     Q_SCRIPTABLE void TasksChanged(const QString &listId);
     Q_SCRIPTABLE void TodayTasksChanged();
+    void SyncRequested();
 
 private:
     LocalRepository *m_repository;

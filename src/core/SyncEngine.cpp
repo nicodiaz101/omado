@@ -3,6 +3,8 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QDebug>
+#include <QtDBus/QDBusMessage>
+#include <QtDBus/QDBusConnection>
 #include <memory>
 
 SyncEngine::SyncEngine(AuthManager *auth, GraphClient *graph, LocalRepository *repo, QObject *parent)
@@ -33,6 +35,7 @@ SyncEngine::SyncEngine(AuthManager *auth, GraphClient *graph, LocalRepository *r
 }
 
 void SyncEngine::startPeriodicSync(int intervalMs) {
+    if (!m_graph) return; // En modo cliente, el daemon se encarga de los chequeos periódicos
     if (!m_timer->isActive()) {
         m_timer->start(intervalMs);
         qDebug() << "[SyncEngine] Sincronización periódica iniciada cada" << intervalMs / 1000 << "segundos";
@@ -61,6 +64,22 @@ void SyncEngine::syncNow() {
     m_isSyncing = true;
     emit syncStatusChanged();
     emit syncStarted();
+
+    if (!m_graph) {
+        // Modo cliente: Solicitar al daemon vía D-Bus
+        QDBusMessage msg = QDBusMessage::createMethodCall("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "RequestSync");
+        QDBusConnection::sessionBus().send(msg);
+        
+        // Simular finalización local para que las vistas se actualicen al cabo de unos ms
+        QTimer::singleShot(200, this, [this]() {
+            m_isSyncing = false;
+            m_lastSyncedAt = QDateTime::currentDateTime();
+            emit syncStatusChanged();
+            emit lastSyncedAtChanged();
+            emit syncFinished(true, "Solicitud enviada");
+        });
+        return;
+    }
 
     performSync();
 }

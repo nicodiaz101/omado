@@ -124,3 +124,8 @@ bool DaemonService::ToggleTask(const QString &taskId, bool completed) {
     }
     return ok;
 }
+
+void DaemonService::RequestSync() {
+    qDebug() << "[DaemonService] Solicitud de sincronización recibida vía D-Bus";
+    emit SyncRequested();
+}
