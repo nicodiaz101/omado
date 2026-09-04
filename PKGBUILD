@@ -1,6 +1,6 @@
 # Maintainer: Nicolas Diaz <nico.d5155@outlook.com.ar>
 pkgname=omado-git
-pkgver=1.0.2
+pkgver=1.0.2.r16.4de9271
 pkgrel=1
 pkgdesc="Ultra-lightweight native task manager with Microsoft To Do sync for Omarchy"
 arch=('x86_64')

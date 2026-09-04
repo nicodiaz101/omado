@@ -1,5 +1,7 @@
 #include <QtTest>
 #include <QSignalSpy>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include "core/Database.h"
 #include "core/DaemonService.h"
 #include "models/LocalRepository.h"
@@ -55,9 +57,12 @@ private slots:
         t.isCompleted = false;
         Task created = m_repo->createTask(t).result();
 
-        QList<QVariantMap> todayTasks = m_daemon->GetTasksForToday();
+        QString jsonStr = m_daemon->GetTasksForToday();
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        QVariantList todayTasks = doc.array().toVariantList();
         bool found = false;
-        for (const auto &map : todayTasks) {
+        for (const auto &item : todayTasks) {
+            QVariantMap map = item.toMap();
             if (map.value("id").toString() == created.id) {
                 found = true;
                 QCOMPARE(map.value("title").toString(), QStringLiteral("Tarea de Hoy Daemon"));

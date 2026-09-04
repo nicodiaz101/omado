@@ -1,3 +1,4 @@
+#include <QJsonDocument>
 #include "DaemonService.h"
 #include "models/LocalRepository.h"
 #include <QtDBus/QDBusMetaType>
@@ -10,6 +11,8 @@ DaemonService::DaemonService(LocalRepository *repo, QObject *parent)
 {
     qDBusRegisterMetaType<OmaDoListEntry>();
     qDBusRegisterMetaType<QList<OmaDoListEntry>>();
+    qDBusRegisterMetaType<QList<QVariantMap>>();
+    qDBusRegisterMetaType<QVariantMap>();
 }
 
 DaemonService::DaemonService(LocalRepository *repo, const QDBusConnection &connection, QObject *parent)
@@ -19,6 +22,8 @@ DaemonService::DaemonService(LocalRepository *repo, const QDBusConnection &conne
 {
     qDBusRegisterMetaType<OmaDoListEntry>();
     qDBusRegisterMetaType<QList<OmaDoListEntry>>();
+    qDBusRegisterMetaType<QList<QVariantMap>>();
+    qDBusRegisterMetaType<QVariantMap>();
 }
 
 bool DaemonService::registerService() {
@@ -68,9 +73,9 @@ QList<OmaDoListEntry> DaemonService::GetLists() {
     return result;
 }
 
-QList<QVariantMap> DaemonService::GetTasksForToday() {
-    QList<QVariantMap> result;
-    if (!m_repository) return result;
+QString DaemonService::GetTasksForToday() {
+    QList<QVariant> result;
+    if (!m_repository) return QStringLiteral("[]");
 
     auto future = m_repository->fetchMyDayTasks();
     QList<Task> tasks = future.result();
@@ -90,7 +95,7 @@ QList<QVariantMap> DaemonService::GetTasksForToday() {
         map.insert(QStringLiteral("sortOrder"), t.sortOrder);
         result.append(map);
     }
-    return result;
+    return QString::fromUtf8(QJsonDocument::fromVariant(result).toJson(QJsonDocument::Compact));
 }
 
 int DaemonService::GetPendingCount(const QString &listId) {

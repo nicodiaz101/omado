@@ -11,8 +11,7 @@
       <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;OmaDoListEntry&gt;"/>
     </method>
     <method name="GetTasksForToday">
-      <arg type="aa{sv}" direction="out"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;QVariantMap&gt;"/>
+      <arg type="s" direction="out"/>
     </method>
     <method name="GetPendingCount">
       <arg type="i" direction="out"/>

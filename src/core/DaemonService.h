@@ -22,7 +22,7 @@ public:
 
 public slots:
     Q_SCRIPTABLE QList<OmaDoListEntry> GetLists();
-    Q_SCRIPTABLE QList<QVariantMap> GetTasksForToday();
+    Q_SCRIPTABLE QString GetTasksForToday();
     Q_SCRIPTABLE int GetPendingCount(const QString &listId);
     Q_SCRIPTABLE int GetTotalPendingCount();
     Q_SCRIPTABLE bool ToggleTask(const QString &taskId, bool completed);
