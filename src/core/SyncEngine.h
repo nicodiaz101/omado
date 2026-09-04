@@ -29,6 +29,11 @@ signals:
     void syncStarted();
     void syncFinished(bool success, const QString &message);
 
+private slots:
+    void onRemoteSyncStarted();
+    void onRemoteSyncFinished(bool success, const QString &message);
+    void onRemoteTasksChanged(const QString &listId);
+
 private:
     void performSync();
     void syncTasksForList(const QString &localListId, const QString &remoteListId, std::function<void()> onDone);

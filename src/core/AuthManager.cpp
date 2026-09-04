@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QProcessEnvironment>
 #include <QUuid>
+#include <QTimer>
 #include <QDebug>
 
 AuthManager::AuthManager(KeychainStore *keychain, QObject *parent)
@@ -18,7 +19,25 @@ AuthManager::AuthManager(KeychainStore *keychain, QObject *parent)
     QString envId = QProcessEnvironment::systemEnvironment().value("OMADO_CLIENT_ID");
     m_clientId = !envId.trimmed().isEmpty() ? envId.trimmed() : QString::fromLatin1(kDefaultClientId);
 
-    checkSavedCredentials();
+    checkSavedCredentials([this](bool success) {
+        if (!success) {
+            // Si las credenciales fallan al iniciar (p.ej. keyring no desbloqueado en inicio del sistema),
+            // reintentar cada 5s hasta 6 veces (30 segundos).
+            auto *retryTimer = new QTimer(this);
+            retryTimer->setInterval(5000);
+            auto attemptCount = std::make_shared<int>(0);
+            connect(retryTimer, &QTimer::timeout, this, [this, retryTimer, attemptCount]() {
+                (*attemptCount)++;
+                checkSavedCredentials([this, retryTimer, attemptCount](bool ok) {
+                    if (ok || *attemptCount >= 6) {
+                        retryTimer->stop();
+                        retryTimer->deleteLater();
+                    }
+                });
+            });
+            retryTimer->start();
+        }
+    });
 }
 
 AuthManager::~AuthManager() {
@@ -46,13 +65,17 @@ QString AuthManager::generateCodeChallenge(const QString &verifier) {
     return QString::fromLatin1(hash.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
 }
 
-void AuthManager::checkSavedCredentials() {
-    if (!m_keychain) return;
+void AuthManager::checkSavedCredentials(std::function<void(bool success)> callback) {
+    if (!m_keychain) {
+        if (callback) callback(false);
+        return;
+    }
 
-    m_keychain->readKey(KeychainStore::kKeyRefreshToken, [this](const QString &refreshToken, bool success) {
+    m_keychain->readKey(KeychainStore::kKeyRefreshToken, [this, callback](const QString &refreshToken, bool success) {
         if (!success || refreshToken.trimmed().isEmpty()) {
             m_isAuthenticated = false;
             emit authStatusChanged();
+            if (callback) callback(false);
             return;
         }
 
@@ -69,13 +92,14 @@ void AuthManager::checkSavedCredentials() {
             }
         });
 
-        m_keychain->readKey(KeychainStore::kKeyUserEmail, [this](const QString &email, bool okEmail) {
+        m_keychain->readKey(KeychainStore::kKeyUserEmail, [this, callback](const QString &email, bool okEmail) {
             if (okEmail) m_userEmail = email;
-            m_keychain->readKey(KeychainStore::kKeyUserName, [this](const QString &name, bool okName) {
+            m_keychain->readKey(KeychainStore::kKeyUserName, [this, callback](const QString &name, bool okName) {
                 if (okName) m_userName = name;
                 emit userChanged();
                 emit authStatusChanged();
                 qDebug() << "[AuthManager] Sesión restaurada para:" << m_userEmail;
+                if (callback) callback(true);
             });
         });
     });
@@ -325,7 +349,13 @@ void AuthManager::refreshAccessToken(std::function<void(bool success)> callback)
 
 void AuthManager::ensureValidToken(std::function<void(const QString &accessToken, bool success)> callback) {
     if (!m_isAuthenticated) {
-        if (callback) callback(QString(), false);
+        checkSavedCredentials([this, callback](bool restored) {
+            if (!restored) {
+                if (callback) callback(QString(), false);
+                return;
+            }
+            ensureValidToken(callback);
+        });
         return;
     }
 

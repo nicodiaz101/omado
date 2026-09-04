@@ -23,7 +23,7 @@ public:
 
     QFuture<Task> createTask(const Task &task);
     QFuture<bool> updateTask(const Task &task);
-    QFuture<bool> deleteTask(const QString &id);
+    QFuture<bool> deleteTask(const QString &id, bool recordForRemoteSync = true);
     QFuture<Task> fetchTaskById(const QString &id);
     QFuture<bool> toggleTask(const QString &taskId, bool completed);
     QFuture<bool> markReminded(const QString &taskId, bool reminded = true);
@@ -37,9 +37,18 @@ public:
     QFuture<QList<Task>> getPendingReminders();
 
     // Sincronización remota
+    struct DeletedTaskRecord {
+        QString id;
+        QString remoteId;
+        QString listRemoteId;
+    };
+
     QString getListRemoteId(const QString &localListId);
     QFuture<bool> updateListRemoteId(const QString &listId, const QString &remoteId);
     QFuture<bool> updateTaskRemoteId(const QString &taskId, const QString &remoteId);
+    QFuture<bool> markTaskSynced(const QString &taskId);
+    QFuture<QList<DeletedTaskRecord>> fetchDeletedTasks();
+    QFuture<bool> removeDeletedTaskRecord(const QString &id);
     QFuture<TaskList> fetchListByRemoteId(const QString &remoteId);
     QFuture<Task> fetchTaskByRemoteId(const QString &remoteId);
     QFuture<TaskList> upsertRemoteList(const QString &remoteId, const QString &displayName);

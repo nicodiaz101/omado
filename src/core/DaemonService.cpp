@@ -130,6 +130,26 @@ bool DaemonService::ToggleTask(const QString &taskId, bool completed) {
     return ok;
 }
 
+bool DaemonService::DeleteTask(const QString &taskId) {
+    if (!m_repository) return false;
+
+    auto taskFuture = m_repository->fetchTaskById(taskId);
+    Task t = taskFuture.result();
+    if (t.id.isEmpty()) {
+        qWarning() << "[DaemonService] DeleteTask: Tarea no encontrada:" << taskId;
+        return false;
+    }
+
+    auto deleteFuture = m_repository->deleteTask(taskId);
+    bool ok = deleteFuture.result();
+
+    if (ok) {
+        emit TasksChanged(t.listId);
+        emit TodayTasksChanged();
+    }
+    return ok;
+}
+
 void DaemonService::RequestSync() {
     qDebug() << "[DaemonService] Solicitud de sincronización recibida vía D-Bus";
     emit SyncRequested();

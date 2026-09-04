@@ -2,6 +2,7 @@
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 #include <QDebug>
 #include <QtDBus/QDBusMessage>
 #include <QtDBus/QDBusConnection>
@@ -13,6 +14,19 @@ SyncEngine::SyncEngine(AuthManager *auth, GraphClient *graph, LocalRepository *r
     m_debounceTimer->setSingleShot(true);
     connect(m_debounceTimer, &QTimer::timeout, this, &SyncEngine::syncNow);
     connect(m_timer, &QTimer::timeout, this, &SyncEngine::syncNow);
+
+    if (!m_graph) {
+        // En modo cliente (GUI), conectarse a las señales D-Bus emitidas por el daemon
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        bus.connect("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "SyncStarted",
+                    this, SLOT(onRemoteSyncStarted()));
+        bus.connect("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "SyncFinished",
+                    this, SLOT(onRemoteSyncFinished(bool, QString)));
+        bus.connect("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "TasksChanged",
+                    this, SLOT(onRemoteTasksChanged(QString)));
+        bus.connect("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "TodayTasksChanged",
+                    this, SLOT(onRemoteTasksChanged(QString)));
+    }
 
     if (m_auth) {
         connect(m_auth, &AuthManager::authSuccess, this, [this]() {
@@ -34,6 +48,28 @@ SyncEngine::SyncEngine(AuthManager *auth, GraphClient *graph, LocalRepository *r
     }
 }
 
+void SyncEngine::onRemoteSyncStarted() {
+    if (!m_isSyncing) {
+        m_isSyncing = true;
+        emit syncStatusChanged();
+        emit syncStarted();
+    }
+}
+
+void SyncEngine::onRemoteSyncFinished(bool success, const QString &message) {
+    m_isSyncing = false;
+    if (success) {
+        m_lastSyncedAt = QDateTime::currentDateTime();
+        emit lastSyncedAtChanged();
+    }
+    emit syncStatusChanged();
+    emit syncFinished(success, message);
+}
+
+void SyncEngine::onRemoteTasksChanged(const QString &) {
+    emit syncFinished(true, QStringLiteral("Actualizado por daemon"));
+}
+
 void SyncEngine::startPeriodicSync(int intervalMs) {
     if (!m_graph) return; // En modo cliente, el daemon se encarga de los chequeos periódicos
     if (!m_timer->isActive()) {
@@ -50,7 +86,6 @@ void SyncEngine::stopPeriodicSync() {
 }
 
 void SyncEngine::scheduleSync(int delayMs) {
-    if (!m_auth || !m_auth->isAuthenticated()) return;
     if (m_debounceTimer) {
         m_debounceTimer->stop();
         m_debounceTimer->start(delayMs);
@@ -59,27 +94,53 @@ void SyncEngine::scheduleSync(int delayMs) {
 
 void SyncEngine::syncNow() {
     if (m_isSyncing) return;
-    if (!m_auth || !m_auth->isAuthenticated()) return;
+
+    if (!m_graph) {
+        // Modo cliente: Solicitar al daemon vía D-Bus
+        m_isSyncing = true;
+        emit syncStatusChanged();
+        emit syncStarted();
+
+        QDBusMessage msg = QDBusMessage::createMethodCall("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "RequestSync");
+        bool sent = QDBusConnection::sessionBus().send(msg);
+        if (!sent) {
+            qWarning() << "[SyncEngine] Error enviando RequestSync por D-Bus al daemon";
+            m_isSyncing = false;
+            emit syncStatusChanged();
+            emit syncFinished(false, "No se pudo conectar al daemon de OmaDo");
+            return;
+        }
+
+        // Timeout de seguridad en caso de que el daemon esté colgado o no responda
+        QTimer::singleShot(20000, this, [this]() {
+            if (m_isSyncing) {
+                m_isSyncing = false;
+                emit syncStatusChanged();
+                emit syncFinished(false, "Timeout esperando respuesta del daemon");
+            }
+        });
+        return;
+    }
+
+    if (!m_auth) return;
+
+    // En modo daemon, si aún no está autenticado, intentar leer credenciales de inmediato
+    if (!m_auth->isAuthenticated()) {
+        qDebug() << "[SyncEngine] Daemon no autenticado al solicitar sync, reintentando credenciales...";
+        m_auth->checkSavedCredentials([this](bool restored) {
+            if (restored) {
+                syncNow();
+            } else {
+                qWarning() << "[SyncEngine] Sincronización omitida: usuario no autenticado";
+                emit syncFinished(false, "No autenticado");
+            }
+        });
+        return;
+    }
 
     m_isSyncing = true;
     emit syncStatusChanged();
     emit syncStarted();
-
-    if (!m_graph) {
-        // Modo cliente: Solicitar al daemon vía D-Bus
-        QDBusMessage msg = QDBusMessage::createMethodCall("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "RequestSync");
-        QDBusConnection::sessionBus().send(msg);
-        
-        // Simular finalización local para que las vistas se actualicen al cabo de unos ms
-        QTimer::singleShot(200, this, [this]() {
-            m_isSyncing = false;
-            m_lastSyncedAt = QDateTime::currentDateTime();
-            emit syncStatusChanged();
-            emit lastSyncedAtChanged();
-            emit syncFinished(true, "Solicitud enviada");
-        });
-        return;
-    }
 
     performSync();
 }
@@ -185,17 +246,22 @@ void SyncEngine::performSync() {
 
 void SyncEngine::syncTasksForList(const QString &localListId, const QString &remoteListId, std::function<void()> onDone) {
     // 1. Obtener tareas remotas de Graph
-    m_graph->fetchTasks(remoteListId, [this, localListId, remoteListId, onDone](bool ok, const QJsonArray &remoteTasks, const QString &) {
+    m_graph->fetchTasks(remoteListId, [this, localListId, remoteListId, onDone](bool ok, const QJsonArray &remoteTasks, const QString &err) {
         if (!ok) {
+            qWarning() << "[SyncEngine] Error al obtener tareas remotas para lista:" << remoteListId << err;
             if (onDone) onDone();
             return;
         }
+
+        QSet<QString> remoteTaskIds;
 
         // Descargar e insertar/actualizar tareas remotas en SQLite
         for (const auto &val : remoteTasks) {
             QJsonObject obj = val.toObject();
             Task t;
             t.remoteId = obj.value("id").toString();
+            remoteTaskIds.insert(t.remoteId);
+
             t.title = obj.value("title").toString();
             t.isCompleted = (obj.value("status").toString() == "completed");
             t.importance = obj.value("importance").toString("normal");
@@ -206,39 +272,111 @@ void SyncEngine::syncTasksForList(const QString &localListId, const QString &rem
             QJsonObject dueObj = obj.value("dueDateTime").toObject();
             QString dueStr = dueObj.value("dateTime").toString();
             if (!dueStr.isEmpty()) {
-                t.dueDate = QDate::fromString(dueStr.split('T').value(0), Qt::ISODate);
+                // Microsoft To Do almacena la fecha de vencimiento como un valor de solo-fecha fijado a medianoche UTC.
+                // No se debe aplicar conversión de zona horaria para evitar desfasar el día en husos horarios negativos (UTC-X).
+                QString datePart = dueStr.split('T').value(0);
+                t.dueDate = QDate::fromString(datePart, Qt::ISODate);
             }
 
             if (obj.value("isReminderOn").toBool()) {
                 QJsonObject remObj = obj.value("reminderDateTime").toObject();
                 QString remStr = remObj.value("dateTime").toString();
                 if (!remStr.isEmpty()) {
-                    t.reminderAt = QDateTime::fromString(remStr, Qt::ISODate).toLocalTime();
+                    QString iso = remStr.endsWith('Z') ? remStr : remStr + "Z";
+                    QDateTime dt = QDateTime::fromString(iso, Qt::ISODate);
+                    t.reminderAt = dt.isValid() ? dt.toLocalTime() : QDateTime::fromString(remStr, Qt::ISODate).toLocalTime();
                 }
+            }
+
+            if (obj.contains("recurrence") && !obj.value("recurrence").isNull()) {
+                QJsonObject recObj = obj.value("recurrence").toObject();
+                QJsonObject patObj = recObj.value("pattern").toObject();
+                QString type = patObj.value("type").toString();
+                if (type == "daily") {
+                    t.recurrence = "daily";
+                } else if (type == "weekly") {
+                    QJsonArray days = patObj.value("daysOfWeek").toArray();
+                    if (days.size() == 5 && !days.contains("saturday") && !days.contains("sunday")) {
+                        t.recurrence = "workdays";
+                    } else {
+                        t.recurrence = "weekly";
+                    }
+                } else if (type == "absoluteMonthly" || type == "relativeMonthly") {
+                    t.recurrence = "monthly";
+                } else {
+                    t.recurrence = "none";
+                }
+            } else {
+                t.recurrence = "none";
             }
 
             m_repo->upsertRemoteTask(localListId, t);
         }
 
-        // 2. Subir tareas locales sin remoteId
+        // 2. Procesar tareas locales
         auto futureTasks = m_repo->fetchTasks(localListId);
         auto *watcher = new QFutureWatcher<QList<Task>>(this);
-        connect(watcher, &QFutureWatcher<QList<Task>>::finished, this, [this, watcher, remoteListId, onDone]() {
+        connect(watcher, &QFutureWatcher<QList<Task>>::finished, this, [this, watcher, localListId, remoteListId, remoteTaskIds, onDone]() {
             QList<Task> localTasks = watcher->result();
             watcher->deleteLater();
 
+            auto pendingOps = std::make_shared<int>(1); // Base 1
+            auto checkDone = [onDone, pendingOps]() {
+                (*pendingOps)--;
+                if (*pendingOps <= 0 && onDone) {
+                    onDone();
+                }
+            };
+
             for (const auto &locTask : localTasks) {
                 if (locTask.remoteId.isEmpty()) {
-                    m_graph->createTask(remoteListId, locTask, [this, locTask](bool okCreate, const QJsonObject &taskObj, const QString &) {
+                    // Tarea local nueva sin remoteId -> Subir a Graph
+                    (*pendingOps)++;
+                    m_graph->createTask(remoteListId, locTask, [this, locTask, checkDone](bool okCreate, const QJsonObject &taskObj, const QString &err) {
                         if (okCreate) {
                             QString newRemoteId = taskObj.value("id").toString();
                             m_repo->updateTaskRemoteId(locTask.id, newRemoteId);
+                        } else {
+                            qWarning() << "[SyncEngine] Error creando tarea en Graph:" << locTask.title << err;
                         }
+                        checkDone();
                     });
+                } else if (locTask.updatedAt.isValid() && locTask.syncedAt.isValid() && (locTask.updatedAt > locTask.syncedAt)) {
+                    // Tarea local con modificaciones pendientes (ej. marcada completada) -> Actualizar en Graph
+                    (*pendingOps)++;
+                    m_graph->updateTask(remoteListId, locTask, [this, locTask, checkDone](bool okUpdate, const QString &err) {
+                        if (okUpdate) {
+                            m_repo->markTaskSynced(locTask.id);
+                        } else {
+                            qWarning() << "[SyncEngine] Error actualizando tarea en Graph:" << locTask.title << err;
+                        }
+                        checkDone();
+                    });
+                } else if (!locTask.remoteId.isEmpty() && !remoteTaskIds.contains(locTask.remoteId) && locTask.syncedAt.isValid()) {
+                    // Tarea eliminada remotamente (en celular / Samsung Reminders) -> Eliminar localmente sin reencolar
+                    m_repo->deleteTask(locTask.id, false);
                 }
             }
 
-            if (onDone) onDone();
+            // 3. Procesar eliminaciones locales pendientes de sincronizar
+            auto deletedFuture = m_repo->fetchDeletedTasks();
+            auto *delWatcher = new QFutureWatcher<QList<LocalRepository::DeletedTaskRecord>>(this);
+            connect(delWatcher, &QFutureWatcher<QList<LocalRepository::DeletedTaskRecord>>::finished, this, [this, delWatcher, remoteListId, pendingOps, checkDone]() {
+                QList<LocalRepository::DeletedTaskRecord> deletedRecords = delWatcher->result();
+                delWatcher->deleteLater();
+
+                for (const auto &rec : deletedRecords) {
+                    if (rec.listRemoteId.isEmpty() || rec.listRemoteId == remoteListId) {
+                        (*pendingOps)++;
+                        m_graph->deleteTask(remoteListId, rec.remoteId, [this, rec, checkDone](bool, const QString &) {
+                            m_repo->removeDeletedTaskRecord(rec.id);
+                            checkDone();
+                        });
+                    }
+                }
+                checkDone(); // Decrementa el base 1
+            });
+            delWatcher->setFuture(deletedFuture);
         });
         watcher->setFuture(futureTasks);
     });
