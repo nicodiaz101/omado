@@ -635,6 +635,21 @@ QFuture<Task> LocalRepository::upsertRemoteTask(const QString &localListId, cons
 
             // Actualizar campos desde remoto
             QDateTime now = QDateTime::currentDateTime();
+
+            // Preservar el estado reminded si el recordatorio no cambió o ya venció
+            bool reminded = existing.reminded;
+            if (t.reminderAt != existing.reminderAt) {
+                if (!t.reminderAt.isValid()) {
+                    reminded = false;
+                } else if (t.reminderAt > now) {
+                    // Nuevo recordatorio establecido a futuro
+                    reminded = false;
+                } else {
+                    // Nuevo recordatorio establecido en el pasado
+                    reminded = true;
+                }
+            }
+
             QSqlQuery qu(db);
             qu.prepare(R"(
                 UPDATE tasks SET 
@@ -657,11 +672,12 @@ QFuture<Task> LocalRepository::upsertRemoteTask(const QString &localListId, cons
             qu.bindValue(":importance", t.importance.isEmpty() ? QStringLiteral("normal") : t.importance);
             qu.bindValue(":due_date", t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : QVariant());
             qu.bindValue(":reminder_at", t.reminderAt.isValid() ? t.reminderAt.toLocalTime().toString(Qt::ISODate) : QVariant());
-            qu.bindValue(":reminded", t.reminded ? 1 : 0);
+            qu.bindValue(":reminded", reminded ? 1 : 0);
             qu.bindValue(":recurrence", t.recurrence.isEmpty() ? QStringLiteral("none") : t.recurrence);
             qu.bindValue(":synced", now.toString(Qt::ISODateWithMs));
             qu.bindValue(":updated", now.toString(Qt::ISODateWithMs));
             qu.exec();
+            t.reminded = reminded;
             t.syncedAt = now;
             t.updatedAt = now;
             return t;
@@ -672,6 +688,12 @@ QFuture<Task> LocalRepository::upsertRemoteTask(const QString &localListId, cons
         t.listId = localListId;
         if (!t.createdAt.isValid()) t.createdAt = QDateTime::currentDateTime();
         QDateTime now = QDateTime::currentDateTime();
+
+        bool initialReminded = false;
+        if (t.reminderAt.isValid() && t.reminderAt <= now) {
+            // Tarea nueva remota cuyo recordatorio ya está en el pasado
+            initialReminded = true;
+        }
 
         QSqlQuery qi(db);
         qi.prepare(R"(
@@ -687,7 +709,7 @@ QFuture<Task> LocalRepository::upsertRemoteTask(const QString &localListId, cons
         qi.bindValue(":importance", t.importance.isEmpty() ? QStringLiteral("normal") : t.importance);
         qi.bindValue(":due_date", t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : QVariant());
         qi.bindValue(":reminder_at", t.reminderAt.isValid() ? t.reminderAt.toLocalTime().toString(Qt::ISODate) : QVariant());
-        qi.bindValue(":reminded", t.reminded ? 1 : 0);
+        qi.bindValue(":reminded", initialReminded ? 1 : 0);
         qi.bindValue(":recurrence", t.recurrence.isEmpty() ? QStringLiteral("none") : t.recurrence);
         qi.bindValue(":sort_order", t.sortOrder);
         qi.bindValue(":created_at", t.createdAt.toString(Qt::ISODateWithMs));
@@ -695,6 +717,8 @@ QFuture<Task> LocalRepository::upsertRemoteTask(const QString &localListId, cons
         qi.bindValue(":synced_at", now.toString(Qt::ISODateWithMs));
         qi.bindValue(":remote_id", t.remoteId);
         qi.exec();
+
+        t.reminded = initialReminded;
 
         t.updatedAt = now;
         t.syncedAt = now;

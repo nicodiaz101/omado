@@ -235,6 +235,41 @@ private slots:
         // Limpieza
         m_repo->deleteList(list.id).result();
     }
+
+    void testRemindedStatePreservedOnSync() {
+        TaskList list = m_repo->createList("Lista Reminded Test").result();
+
+        Task t;
+        t.listId = list.id;
+        t.title = "Tarea con Recordatorio";
+        t.reminderAt = QDateTime::currentDateTime().addSecs(-60); // 1 minuto en el pasado
+        Task created = m_repo->createTask(t).result();
+
+        QString testRemoteId = QStringLiteral("graph-reminder-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        m_repo->updateTaskRemoteId(created.id, testRemoteId).result();
+
+        // Marcar como recordada
+        m_repo->markReminded(created.id, true).result();
+        Task remindedTask = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(remindedTask.reminded, true);
+
+        // Simular ciclo de sincronización desde Graph (Graph no envía el campo reminded)
+        Task remoteTask;
+        remoteTask.remoteId = testRemoteId;
+        remoteTask.title = "Tarea con Recordatorio";
+        remoteTask.reminderAt = t.reminderAt;
+        remoteTask.reminded = false; // Como viene de Graph
+
+        Task synced = m_repo->upsertRemoteTask(list.id, remoteTask).result();
+        QCOMPARE(synced.reminded, true); // Debe preservar reminded = true
+
+        Task checkDb = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(checkDb.reminded, true); // En la base de datos debe seguir reminded = true
+
+        // Limpieza
+        m_repo->deleteTask(created.id).result();
+        m_repo->deleteList(list.id).result();
+    }
 };
 
 QTEST_MAIN(tst_LocalRepository)
