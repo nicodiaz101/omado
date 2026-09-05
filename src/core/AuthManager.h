@@ -29,7 +29,7 @@ public:
 
     Q_INVOKABLE void startLogin();
     Q_INVOKABLE void logout();
-    Q_INVOKABLE void checkSavedCredentials();
+    Q_INVOKABLE void checkSavedCredentials(std::function<void(bool success)> callback = nullptr);
 
     void ensureValidToken(std::function<void(const QString &accessToken, bool success)> callback);
 

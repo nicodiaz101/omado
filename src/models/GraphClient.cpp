@@ -27,6 +27,7 @@ void GraphClient::sendAuthorizedRequest(const QString &method, const QString &en
         QNetworkRequest req(url);
         req.setRawHeader("Authorization", "Bearer " + accessToken.toUtf8());
         req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        req.setRawHeader("Prefer", "outlook.timezone=\"UTC\"");
 
         QNetworkReply *reply = nullptr;
         if (method == "GET") {
@@ -89,11 +90,47 @@ QJsonObject GraphClient::taskToJson(const Task &task) {
         obj["isReminderOn"] = false;
     }
 
+    if (!task.recurrence.isEmpty() && task.recurrence != "none") {
+        QJsonObject recObj;
+        QJsonObject pattern;
+        QJsonObject range;
+
+        if (task.recurrence == "daily") {
+            pattern["type"] = "daily";
+            pattern["interval"] = 1;
+        } else if (task.recurrence == "weekly") {
+            pattern["type"] = "weekly";
+            pattern["interval"] = 1;
+        } else if (task.recurrence == "workdays") {
+            pattern["type"] = "weekly";
+            pattern["interval"] = 1;
+            QJsonArray days;
+            days.append("monday");
+            days.append("tuesday");
+            days.append("wednesday");
+            days.append("thursday");
+            days.append("friday");
+            pattern["daysOfWeek"] = days;
+        } else if (task.recurrence == "monthly") {
+            pattern["type"] = "absoluteMonthly";
+            pattern["interval"] = 1;
+            pattern["dayOfMonth"] = task.dueDate.isValid() ? task.dueDate.day() : 1;
+        }
+
+        range["type"] = "noEnd";
+        range["startDate"] = task.dueDate.isValid() ? task.dueDate.toString(Qt::ISODate) : QDate::currentDate().toString(Qt::ISODate);
+        range["recurrenceTimeZone"] = "UTC";
+
+        recObj["pattern"] = pattern;
+        recObj["range"] = range;
+        obj["recurrence"] = recObj;
+    }
+
     return obj;
 }
 
 void GraphClient::fetchLists(std::function<void(bool success, const QJsonArray &lists, const QString &error)> callback) {
-    sendAuthorizedRequest("GET", "/lists", QByteArray(), [callback](bool ok, int, const QByteArray &data, const QString &err) {
+    sendAuthorizedRequest("GET", "/lists?$top=100", QByteArray(), [callback](bool ok, int, const QByteArray &data, const QString &err) {
         if (!ok) {
             if (callback) callback(false, QJsonArray(), err);
             return;
@@ -135,7 +172,7 @@ void GraphClient::deleteList(const QString &remoteListId, std::function<void(boo
 }
 
 void GraphClient::fetchTasks(const QString &remoteListId, std::function<void(bool success, const QJsonArray &tasks, const QString &error)> callback) {
-    sendAuthorizedRequest("GET", QStringLiteral("/lists/%1/tasks").arg(remoteListId), QByteArray(), [callback](bool ok, int, const QByteArray &data, const QString &err) {
+    sendAuthorizedRequest("GET", QStringLiteral("/lists/%1/tasks?$top=1000").arg(remoteListId), QByteArray(), [callback](bool ok, int, const QByteArray &data, const QString &err) {
         if (!ok) {
             if (callback) callback(false, QJsonArray(), err);
             return;

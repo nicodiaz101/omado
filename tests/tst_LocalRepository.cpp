@@ -171,6 +171,105 @@ private slots:
         m_repo->deleteTask(createdT1.id).result();
         m_repo->deleteList(list.id).result();
     }
+
+    void testSyncTrackingAndDirtyCheck() {
+        TaskList list = m_repo->createList("Lista Sync Test").result();
+
+        // 1. Crear tarea local y simular que se sincronizó con Graph
+        Task t;
+        t.listId = list.id;
+        t.title = "Tarea para Sincronizar";
+        t.isCompleted = false;
+        Task created = m_repo->createTask(t).result();
+        QVERIFY(!created.id.isEmpty());
+
+        QString testRemoteId = QStringLiteral("graph-task-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        bool linked = m_repo->updateTaskRemoteId(created.id, testRemoteId).result();
+        QVERIFY(linked);
+
+        Task synced = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(synced.remoteId, testRemoteId);
+        QVERIFY(synced.syncedAt.isValid());
+        QVERIFY(synced.updatedAt.isValid());
+
+        // 2. Modificar la tarea localmente (marcar completada)
+        QThread::msleep(50);
+        bool toggled = m_repo->toggleTask(created.id, true).result();
+        QVERIFY(toggled);
+
+        Task dirtyTask = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(dirtyTask.isCompleted, true);
+        QVERIFY(dirtyTask.updatedAt > dirtyTask.syncedAt);
+
+        // 3. Simular que Graph aún la tiene sin completar y el daemon hace upsertRemoteTask
+        Task staleRemoteTask;
+        staleRemoteTask.remoteId = testRemoteId;
+        staleRemoteTask.title = "Tarea para Sincronizar";
+        staleRemoteTask.isCompleted = false;
+
+        Task preserved = m_repo->upsertRemoteTask(list.id, staleRemoteTask).result();
+        QCOMPARE(preserved.isCompleted, true); // No debe ser pisada
+
+        Task checkDb = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(checkDb.isCompleted, true); // Sigue completada en la base de datos
+
+        // 4. Marcar como sincronizada
+        bool marked = m_repo->markTaskSynced(created.id).result();
+        QVERIFY(marked);
+
+        // 5. Eliminar tarea localmente y comprobar que se guarda en deleted_tasks
+        bool deleted = m_repo->deleteTask(created.id).result();
+        QVERIFY(deleted);
+
+        QList<LocalRepository::DeletedTaskRecord> deletedRecords = m_repo->fetchDeletedTasks().result();
+        bool foundDel = false;
+        for (const auto &d : deletedRecords) {
+            if (d.remoteId == testRemoteId) {
+                foundDel = true;
+                m_repo->removeDeletedTaskRecord(d.id).result();
+                break;
+            }
+        }
+        QVERIFY(foundDel);
+
+        // Limpieza
+        m_repo->deleteList(list.id).result();
+    }
+
+    void testRemindedStatePreservedOnSync() {
+        TaskList list = m_repo->createList("Lista Reminded Test").result();
+
+        Task t;
+        t.listId = list.id;
+        t.title = "Tarea con Recordatorio";
+        t.reminderAt = QDateTime::currentDateTime().addSecs(-60); // 1 minuto en el pasado
+        Task created = m_repo->createTask(t).result();
+
+        QString testRemoteId = QStringLiteral("graph-reminder-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        m_repo->updateTaskRemoteId(created.id, testRemoteId).result();
+
+        // Marcar como recordada
+        m_repo->markReminded(created.id, true).result();
+        Task remindedTask = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(remindedTask.reminded, true);
+
+        // Simular ciclo de sincronización desde Graph (Graph no envía el campo reminded)
+        Task remoteTask;
+        remoteTask.remoteId = testRemoteId;
+        remoteTask.title = "Tarea con Recordatorio";
+        remoteTask.reminderAt = t.reminderAt;
+        remoteTask.reminded = false; // Como viene de Graph
+
+        Task synced = m_repo->upsertRemoteTask(list.id, remoteTask).result();
+        QCOMPARE(synced.reminded, true); // Debe preservar reminded = true
+
+        Task checkDb = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(checkDb.reminded, true); // En la base de datos debe seguir reminded = true
+
+        // Limpieza
+        m_repo->deleteTask(created.id).result();
+        m_repo->deleteList(list.id).result();
+    }
 };
 
 QTEST_MAIN(tst_LocalRepository)

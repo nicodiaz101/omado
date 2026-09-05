@@ -206,4 +206,4 @@
 | v0.1.0-alpha | 1 (offline completo) | ✅ |
 | v0.2.0-alpha | 2 (notificaciones + daemon D-Bus) | ✅ |
 | v1.0.0 | 3 (sync MS To Do opcional) | ✅ |
-| v1.1.0 | 4 (plugin de panel Quickshell) | 🔲 |
+| v1.1.0 | 4 (plugin de panel Quickshell) | ✅ |

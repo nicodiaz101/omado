@@ -123,6 +123,30 @@ private slots:
         m_repo->deleteTask(created.id).result();
         m_repo->deleteList(list.id).result();
     }
+
+    void testDeleteTaskAndSignals() {
+        TaskList list = m_repo->createList("Delete Test List").result();
+
+        Task t;
+        t.listId = list.id;
+        t.title = "Tarea Delete";
+        t.isCompleted = false;
+        Task created = m_repo->createTask(t).result();
+
+        QSignalSpy spyTasksChanged(m_daemon, &DaemonService::TasksChanged);
+        QSignalSpy spyTodayTasksChanged(m_daemon, &DaemonService::TodayTasksChanged);
+
+        bool deleted = m_daemon->DeleteTask(created.id);
+        QVERIFY(deleted);
+
+        QCOMPARE(spyTasksChanged.count(), 1);
+        QCOMPARE(spyTodayTasksChanged.count(), 1);
+
+        Task fetched = m_repo->fetchTaskById(created.id).result();
+        QVERIFY(fetched.id.isEmpty());
+
+        m_repo->deleteList(list.id).result();
+    }
 };
 
 QTEST_MAIN(tst_DaemonService)

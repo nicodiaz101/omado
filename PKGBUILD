@@ -1,6 +1,6 @@
 # Maintainer: Nicolas Diaz <nico.d5155@outlook.com.ar>
 pkgname=omado-git
-pkgver=1.0.2.r16.4de9271
+pkgver=1.1.0.r19.1b9aa55
 pkgrel=1
 pkgdesc="Ultra-lightweight native task manager with Microsoft To Do sync for Omarchy"
 arch=('x86_64')
@@ -25,7 +25,7 @@ sha256sums=('SKIP')
 
 pkgver() {
     cd "$srcdir/omado"
-    printf "1.0.2.r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    printf "1.1.0.r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 build() {

@@ -25,5 +25,9 @@
       <arg name="taskId" type="s" direction="in"/>
       <arg name="completed" type="b" direction="in"/>
     </method>
+    <method name="DeleteTask">
+      <arg type="b" direction="out"/>
+      <arg name="taskId" type="s" direction="in"/>
+    </method>
   </interface>
 </node>

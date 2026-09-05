@@ -20,6 +20,8 @@ struct Task {
     QList<TaskStep> steps;
     int             sortOrder    = 0;
     QDateTime       createdAt;
+    QDateTime       updatedAt;
     QDateTime       completedAt;
+    QDateTime       syncedAt;
     QString         remoteId;
 };

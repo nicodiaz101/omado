@@ -8,7 +8,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}=======================================${NC}"
-echo -e "${BLUE}         OmaDo Easy Installer          ${NC}"
+echo -e "${BLUE}       OmaDo Easy Installer v1.1       ${NC}"
 echo -e "${BLUE}=======================================${NC}"
 
 # Check for required tools
@@ -31,7 +31,7 @@ if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
 fi
 
 # Build
-echo -e "\n${GREEN}==>${NC} Compilando OmaDo..."
+echo -e "\n${GREEN}==>${NC} Compilando OmaDo v1.1..."
 mkdir -p build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
@@ -46,6 +46,9 @@ else
     # Ensure systemd user service directory exists
     mkdir -p "$HOME/.config/systemd/user"
     cp ../systemd/omado.service "$HOME/.config/systemd/user/" 2>/dev/null || true
+    if [ -f "$HOME/.local/bin/omado" ]; then
+        sed -i "s|ExecStart=/usr/bin/omado|ExecStart=$HOME/.local/bin/omado|" "$HOME/.config/systemd/user/omado.service" 2>/dev/null || true
+    fi
 fi
 
 # Clean up obsolete daemon shortcut from application launcher if present
@@ -55,5 +58,5 @@ if [ "$EUID" -eq 0 ]; then
     rm -f /usr/local/share/applications/omado-daemon.desktop
 fi
 
-echo -e "\n${GREEN}✓ ¡OmaDo se instaló correctamente!${NC}"
+echo -e "\n${GREEN}✓ ¡OmaDo v1.1 se instaló correctamente!${NC}"
 echo -e "Podés abrirlo desde el ${BLUE}menú de aplicaciones de Omarchy${NC} o ejecutando '${BLUE}omado${NC}' en la terminal."

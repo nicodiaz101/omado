@@ -30,6 +30,7 @@ bool Database::initialize() {
     // 3. Activar WAL mode y constrains de foreign keys
     executeSql("PRAGMA journal_mode=WAL;");
     executeSql("PRAGMA foreign_keys=ON;");
+    executeSql("PRAGMA busy_timeout=5000;");
     
     // 4. Migraciones
     return applyMigrations();
@@ -87,6 +88,7 @@ bool Database::applyMigrations() {
                 recurrence      TEXT NOT NULL DEFAULT 'none',
                 sort_order      INTEGER NOT NULL DEFAULT 0,
                 created_at      TEXT NOT NULL,
+                updated_at      TEXT,
                 completed_at    TEXT,
                 synced_at       TEXT,
                 remote_id       TEXT
@@ -153,6 +155,51 @@ bool Database::applyMigrations() {
         } else {
             m_db.rollback();
             qWarning() << "[Database] Falló la migración v2";
+            return false;
+        }
+    }
+
+    if (currentVersion < 3) {
+        qDebug() << "[Database] Aplicando migración v3 (tracking de actualizaciones y eliminaciones)...";
+        m_db.transaction();
+
+        bool hasUpdatedAt = false;
+        QSqlQuery infoQuery(m_db);
+        if (infoQuery.exec("PRAGMA table_info(tasks)")) {
+            while (infoQuery.next()) {
+                if (infoQuery.value("name").toString() == "updated_at") {
+                    hasUpdatedAt = true;
+                    break;
+                }
+            }
+        }
+
+        bool ok = true;
+        if (!hasUpdatedAt) {
+            ok = executeSql("ALTER TABLE tasks ADD COLUMN updated_at TEXT;");
+            if (ok) {
+                executeSql("UPDATE tasks SET updated_at = coalesce(completed_at, created_at, datetime('now')) WHERE updated_at IS NULL;");
+            }
+        }
+
+        if (ok) {
+            ok = executeSql(R"(
+                CREATE TABLE IF NOT EXISTS deleted_tasks (
+                    id              TEXT PRIMARY KEY,
+                    remote_id       TEXT NOT NULL,
+                    list_remote_id  TEXT,
+                    deleted_at      TEXT NOT NULL
+                );
+            )");
+        }
+
+        if (ok) {
+            executeSql("INSERT INTO schema_version (version, applied_at) VALUES (3, datetime('now'))");
+            m_db.commit();
+            currentVersion = 3;
+        } else {
+            m_db.rollback();
+            qWarning() << "[Database] Falló la migración v3";
             return false;
         }
     }

@@ -50,6 +50,12 @@ int main(int argc, char *argv[])
 
         DaemonService daemonService(&repo);
         QObject::connect(&daemonService, &DaemonService::SyncRequested, &syncEngine, &SyncEngine::syncNow);
+        QObject::connect(&syncEngine, &SyncEngine::syncStarted, &daemonService, &DaemonService::SyncStarted);
+        QObject::connect(&syncEngine, &SyncEngine::syncFinished, &daemonService, [&daemonService](bool success, const QString &message) {
+            emit daemonService.SyncFinished(success, message);
+            emit daemonService.TodayTasksChanged();
+            emit daemonService.TasksChanged(QString());
+        });
 
         if (!daemonService.registerService()) {
             qWarning() << "[Daemon] No se pudo registrar el servicio D-Bus";
