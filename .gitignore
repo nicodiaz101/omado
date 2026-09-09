@@ -22,3 +22,8 @@ qmlcache/
 # Binaries
 omado
 omado_tests
+
+# Arch packaging
+*.pkg.tar.zst
+pkg/
+src/omado/

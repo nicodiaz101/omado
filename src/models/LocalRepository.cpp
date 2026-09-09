@@ -134,7 +134,7 @@ QFuture<QList<Task>> LocalRepository::fetchMyDayTasks() {
         QList<Task> tasks;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
-        q.prepare("SELECT * FROM tasks WHERE is_my_day = 1 OR due_date = :today ORDER BY is_completed ASC, sort_order DESC, created_at DESC");
+        q.prepare("SELECT * FROM tasks WHERE is_my_day = 1 OR due_date = :today OR substr(due_date, 1, 10) = :today OR substr(reminder_at, 1, 10) = :today ORDER BY is_completed ASC, sort_order DESC, created_at DESC");
         q.bindValue(":today", QDate::currentDate().toString(Qt::ISODate));
         if (q.exec()) {
             while (q.next()) tasks.append(mapToTask(q, db));
@@ -208,7 +208,7 @@ QFuture<Task> LocalRepository::createTask(const Task &task) {
         q.bindValue(":is_my_day", t.isMyDay ? 1 : 0);
         q.bindValue(":importance", t.importance.isEmpty() ? QStringLiteral("normal") : t.importance);
         q.bindValue(":due_date", t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : QVariant());
-        q.bindValue(":reminder_at", t.reminderAt.isValid() ? t.reminderAt.toString(Qt::ISODate) : QVariant());
+        q.bindValue(":reminder_at", t.reminderAt.isValid() ? t.reminderAt.toLocalTime().toString(Qt::ISODate) : QVariant());
         q.bindValue(":reminded", t.reminded ? 1 : 0);
         q.bindValue(":recurrence", t.recurrence.isEmpty() ? QStringLiteral("none") : t.recurrence);
         q.bindValue(":sort_order", t.sortOrder);

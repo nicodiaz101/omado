@@ -59,6 +59,64 @@ Item {
 
                         Item { Layout.fillWidth: true }
 
+                        // Filter Switch: Hide completed tasks
+                        Rectangle {
+                            id: filterToggleBtn
+                            height: 22
+                            width: filterRow.implicitWidth + 16
+                            radius: 11
+                            color: TaskModel.hideCompleted
+                                   ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+                                   : (mouseAreaFilter.containsMouse ? Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.08) : Qt.rgba(Theme.border.r, Theme.border.g, Theme.border.b, 0.25))
+                            border.color: TaskModel.hideCompleted ? Theme.accent : Qt.rgba(Theme.border.r, Theme.border.g, Theme.border.b, 0.5)
+                            border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            Row {
+                                id: filterRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                // Switch track & knob
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 18
+                                    height: 10
+                                    radius: 5
+                                    color: TaskModel.hideCompleted ? Theme.accent : Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.2)
+
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        x: TaskModel.hideCompleted ? 9 : 1
+                                        width: 8
+                                        height: 8
+                                        radius: 4
+                                        color: TaskModel.hideCompleted ? Theme.background : Theme.foreground
+                                        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                                    }
+                                }
+
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: qsTr("Hide completed")
+                                    color: TaskModel.hideCompleted ? Theme.accent : Theme.foreground
+                                    opacity: TaskModel.hideCompleted ? 1.0 : 0.7
+                                    font.family: "iA Writer Mono"
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            MouseArea {
+                                id: mouseAreaFilter
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: TaskModel.hideCompleted = !TaskModel.hideCompleted
+                            }
+                        }
+
                         // Count Badge
                         Rectangle {
                             height: 22

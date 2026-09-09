@@ -11,6 +11,7 @@ set(TEST_TARGETS
     tst_DaemonService
     tst_AuthManager
     tst_GraphClient
+    tst_TaskModel
 )
 
 foreach(test_name ${TEST_TARGETS})

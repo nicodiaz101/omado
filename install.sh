@@ -8,7 +8,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}=======================================${NC}"
-echo -e "${BLUE}       OmaDo Easy Installer v1.1       ${NC}"
+echo -e "${BLUE}       OmaDo Easy Installer v1.2       ${NC}"
 echo -e "${BLUE}=======================================${NC}"
 
 # Check for required tools
@@ -31,7 +31,7 @@ if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
 fi
 
 # Build
-echo -e "\n${GREEN}==>${NC} Compilando OmaDo v1.1..."
+echo -e "\n${GREEN}==>${NC} Compilando OmaDo v1.2..."
 mkdir -p build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
@@ -58,5 +58,5 @@ if [ "$EUID" -eq 0 ]; then
     rm -f /usr/local/share/applications/omado-daemon.desktop
 fi
 
-echo -e "\n${GREEN}✓ ¡OmaDo v1.1 se instaló correctamente!${NC}"
+echo -e "\n${GREEN}✓ ¡OmaDo v1.2 se instaló correctamente!${NC}"
 echo -e "Podés abrirlo desde el ${BLUE}menú de aplicaciones de Omarchy${NC} o ejecutando '${BLUE}omado${NC}' en la terminal."

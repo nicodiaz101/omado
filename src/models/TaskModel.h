@@ -13,6 +13,7 @@ class TaskModel : public QAbstractListModel {
     Q_PROPERTY(int selectedIndex READ selectedIndex WRITE setSelectedIndex NOTIFY selectedIndexChanged)
     Q_PROPERTY(QVariantMap selectedTask READ selectedTask NOTIFY selectedTaskChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    Q_PROPERTY(bool hideCompleted READ hideCompleted WRITE setHideCompleted NOTIFY hideCompletedChanged)
 
 public:
     enum Roles { 
@@ -49,6 +50,9 @@ public:
 
     QVariantMap selectedTask() const;
 
+    bool hideCompleted() const { return m_hideCompleted; }
+    void setHideCompleted(bool hide);
+
     Q_INVOKABLE void loadTasks();
     Q_INVOKABLE void addTask(const QString &title, const QString &dueDate = "", const QString &reminderAt = "", const QString &recurrence = "none");
     Q_INVOKABLE void addTaskWithSteps(const QString &title, const QString &dueDate, const QString &reminderAt, const QString &recurrence, const QStringList &steps);
@@ -70,6 +74,7 @@ signals:
     void selectedIndexChanged();
     void selectedTaskChanged();
     void countChanged();
+    void hideCompletedChanged();
 
 private:
     LocalRepository *m_repo = nullptr;
@@ -77,8 +82,12 @@ private:
     SyncEngine      *m_sync = nullptr;
     QString m_currentListId;
     int m_selectedIndex = -1;
+    bool m_hideCompleted = false;
     QList<Task> m_tasks;
+    QList<int> m_visibleIndices;
     QFutureWatcher<QList<Task>> m_watcher;
 
+    void rebuildVisibleIndices();
+    int actualIndex(int row) const;
     void notifyRowChanged(int row);
 };
