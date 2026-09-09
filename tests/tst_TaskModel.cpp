@@ -78,6 +78,51 @@ private slots:
         // Limpieza
         m_repo->deleteList(list.id).result();
     }
+
+    void testAddTaskWithNaturalLanguageDate() {
+        TaskList list = m_repo->createList("Lista NL Test").result();
+        TaskModel model(m_repo);
+        model.setCurrentListId(list.id);
+        QTRY_COMPARE(model.rowCount(), 0);
+
+        model.addTask("Comprar leche mañana");
+        QCOMPARE(model.rowCount(), 1);
+
+        QModelIndex idx = model.index(0, 0);
+        QCOMPARE(model.data(idx, TaskModel::TitleRole).toString(), QStringLiteral("Comprar leche"));
+        QCOMPARE(model.data(idx, TaskModel::DueDateRole).toString(), QDate::currentDate().addDays(1).toString(Qt::ISODate));
+        QVERIFY(model.data(idx, TaskModel::ReminderAtRole).toString().isEmpty());
+
+        m_repo->deleteList(list.id).result();
+    }
+
+    void testAddTaskWithNaturalLanguageDateTime() {
+        TaskList list = m_repo->createList("Lista NL DateTime Test").result();
+        TaskModel model(m_repo);
+        model.setCurrentListId(list.id);
+        QTRY_COMPARE(model.rowCount(), 0);
+
+        model.addTask("Reunión con equipo mañana a las 15:30");
+        QCOMPARE(model.rowCount(), 1);
+
+        QModelIndex idx = model.index(0, 0);
+        QCOMPARE(model.data(idx, TaskModel::TitleRole).toString(), QStringLiteral("Reunión con equipo"));
+        QCOMPARE(model.data(idx, TaskModel::DueDateRole).toString(), QDate::currentDate().addDays(1).toString(Qt::ISODate));
+        QString expectedReminder = QString("%1 15:30").arg(QDate::currentDate().addDays(1).toString(Qt::ISODate));
+        QCOMPARE(model.data(idx, TaskModel::ReminderAtRole).toString(), expectedReminder);
+
+        m_repo->deleteList(list.id).result();
+    }
+
+    void testParseInput() {
+        TaskModel model(m_repo);
+        QVariantMap map = model.parseInput("Dentista mañana a las 10:00");
+        QCOMPARE(map["cleanTitle"].toString(), QStringLiteral("Dentista"));
+        QCOMPARE(map["hasDueDate"].toBool(), true);
+        QCOMPARE(map["hasReminder"].toBool(), true);
+        QCOMPARE(map["dueDate"].toString(), QDate::currentDate().addDays(1).toString(Qt::ISODate));
+        QCOMPARE(map["reminderTime"].toString(), QStringLiteral("10:00"));
+    }
 };
 
 QTEST_MAIN(tst_TaskModel)

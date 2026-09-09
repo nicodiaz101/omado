@@ -1,6 +1,7 @@
 #include "TaskModel.h"
 #include "GraphClient.h"
 #include "../core/SyncEngine.h"
+#include "../core/TaskInputParser.h"
 #include <QUuid>
 #include <QDebug>
 #include <QSettings>
@@ -211,6 +212,18 @@ void TaskModel::notifyRowChanged(int row) {
     }
 }
 
+QVariantMap TaskModel::parseInput(const QString &text) const {
+    auto parsed = TaskInputParser::parse(text);
+    QVariantMap map;
+    map["cleanTitle"] = parsed.cleanTitle;
+    map["hasDueDate"] = parsed.hasDueDate;
+    map["dueDate"] = parsed.hasDueDate ? parsed.dueDate.toString(Qt::ISODate) : QString();
+    map["hasReminder"] = parsed.hasReminder;
+    map["reminderAt"] = parsed.hasReminder ? parsed.reminderAt.toString("yyyy-MM-dd HH:mm") : QString();
+    map["reminderTime"] = parsed.hasReminder ? parsed.reminderAt.toString("HH:mm") : QString();
+    return map;
+}
+
 void TaskModel::addTask(const QString &title, const QString &dueDate, const QString &reminderAt, const QString &recurrence) {
     addTaskWithSteps(title, dueDate, reminderAt, recurrence, QStringList());
 }
@@ -218,20 +231,37 @@ void TaskModel::addTask(const QString &title, const QString &dueDate, const QStr
 void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, const QString &reminderAt, const QString &recurrence, const QStringList &steps) {
     if (!m_repo || title.trimmed().isEmpty()) return;
     
+    QString finalTitle = title.trimmed();
+    QString finalDueDate = dueDate;
+    QString finalReminderAt = reminderAt;
+
+    if (finalDueDate.isEmpty() && finalReminderAt.isEmpty()) {
+        auto parsed = TaskInputParser::parse(finalTitle);
+        if (parsed.hasDueDate || parsed.hasReminder) {
+            finalTitle = parsed.cleanTitle;
+            if (parsed.hasDueDate) {
+                finalDueDate = parsed.dueDate.toString(Qt::ISODate);
+            }
+            if (parsed.hasReminder) {
+                finalReminderAt = parsed.reminderAt.toString("yyyy-MM-dd HH:mm");
+            }
+        }
+    }
+
     Task t;
     t.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    t.title = title.trimmed();
+    t.title = finalTitle;
     t.body = "";
     t.isCompleted = false;
     t.importance = "normal";
     t.recurrence = recurrence.isEmpty() ? "none" : recurrence;
     t.createdAt = QDateTime::currentDateTime();
 
-    if (!dueDate.isEmpty()) {
-        t.dueDate = QDate::fromString(dueDate, Qt::ISODate);
+    if (!finalDueDate.isEmpty()) {
+        t.dueDate = QDate::fromString(finalDueDate, Qt::ISODate);
     }
-    if (!reminderAt.isEmpty()) {
-        t.reminderAt = parseDateTimeLocal(reminderAt);
+    if (!finalReminderAt.isEmpty()) {
+        t.reminderAt = parseDateTimeLocal(finalReminderAt);
     }
 
     if (m_currentListId == "special-myday") {

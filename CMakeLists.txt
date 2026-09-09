@@ -24,6 +24,7 @@ add_library(omado_lib STATIC
     src/models/LocalRepository.cpp
     src/models/TaskListModel.cpp
     src/models/TaskModel.cpp
+    src/core/TaskInputParser.cpp
 )
 target_include_directories(omado_lib PUBLIC src/)
 target_link_libraries(omado_lib PUBLIC

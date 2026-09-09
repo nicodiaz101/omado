@@ -12,6 +12,7 @@ set(TEST_TARGETS
     tst_AuthManager
     tst_GraphClient
     tst_TaskModel
+    tst_TaskInputParser
 )
 
 foreach(test_name ${TEST_TARGETS})

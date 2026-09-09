@@ -54,6 +54,7 @@ public:
     void setHideCompleted(bool hide);
 
     Q_INVOKABLE void loadTasks();
+    Q_INVOKABLE QVariantMap parseInput(const QString &text) const;
     Q_INVOKABLE void addTask(const QString &title, const QString &dueDate = "", const QString &reminderAt = "", const QString &recurrence = "none");
     Q_INVOKABLE void addTaskWithSteps(const QString &title, const QString &dueDate, const QString &reminderAt, const QString &recurrence, const QStringList &steps);
     Q_INVOKABLE void toggleTaskCompletion(int row);
