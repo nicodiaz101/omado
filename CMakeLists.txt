@@ -56,6 +56,8 @@ qt_add_qml_module(omado
         icons/alarm.svg
         icons/calendar.svg
         icons/close.svg
+        icons/eye.svg
+        icons/eye-off.svg
         icons/list.svg
         icons/omado.svg
         icons/plus.svg
