@@ -18,42 +18,6 @@ I love Omarchy, but I have Samsung devices. Samsung Reminders is a beatiful and 
 
 ---
 
-## 🗺 Roadmap & Current Progress
-
-### ✅ Milestone 1: Offline Core & UI (Completed)
-- [x] Modern target-based CMake build structure (`omado`, `omado_lib`).
-- [x] Asynchronous SQLite database with dynamic thread-connection pooling and schema migrations.
-- [x] Full local repository (CRUD for lists, tasks, and subtasks/steps).
-- [x] Real-time TOML theme parser (`ThemeReader`) with atomic rename watching.
-- [x] 100% Native English interface with Qt `qsTr` internationalization support.
-- [x] 2-Section SidePanel (Special Views + Custom User Lists + List deletion).
-- [x] Task list with animated circular checkboxes (`CheckCircle`) and importance toggles (★).
-- [x] Bottom InputBar (Zone C) with Quick-Add metadata:
-  - 📅 Interactive monthly calendar picker (`DatePickerPopup`).
-  - ⏰ Custom time & preset reminder picker (`TimePickerPopup`).
-  - 🔄 Recurrence selector (`RecurrencePopup` - Daily, Weekdays, Weekly, Monthly).
-  - 📝 Inline draft subtasks builder (`DraftStepsPopup`).
-- [x] Slide-in task detail panel (`TaskDetail.qml`) with notes editor, subtask checklist, and deletion.
-- [x] Keyboard shortcuts (`N` for new task, `Space` to toggle, `Delete` to remove, `Arrows` to navigate, `Esc` to close drawer).
-
-### ✅ Milestone 2: Native Notifications & Background Daemon (Completed)
-- [x] Direct D-Bus notification service via `org.freedesktop.Notifications`.
-- [x] Background daemon mode (`omado --daemon`) without GUI for scheduled reminder monitoring.
-- [x] Full D-Bus IPC service (`io.omarchy.OmaDo`) exporting lists, today tasks, pending counts, and reactive signals.
-- [x] Auto-start desktop entry (`autostart/omado-daemon.desktop`) and systemd user unit (`systemd/omado.service`).
-
-### ✅ Milestone 3: Microsoft To Do Cloud Synchronization (Completed)
-- [x] OAuth 2.0 PKCE authentication with Microsoft Entra ID (RFC 7636 compliant, no client secrets, CSRF-protected).
-- [x] Secure token storage using system keyring via `qtkeychain-qt6` (`gnome-keyring` / `libsecret`).
-- [x] Full Microsoft Graph REST client (`/v1.0/me/todo/` CRUD for lists, tasks, and checklist items).
-- [x] Bidirectional sync engine (startup sync, 5-minute background sync, and debounced instant sync on task mutations).
-- [x] Reactive connection footer and Omarchy-styled account management popup.
-
-### 🔲 Milestone 4: Quickshell Panel Plugin (v1.1)
-- [ ] Dedicated panel widget (`omado-panel`) communicating with OmaDo via D-Bus (`io.omarchy.OmaDo`).
-
----
-
 ## 🛠 Installation Guide
 
 ### Option 1: Quick Automated Install (Recommended)

@@ -196,6 +196,16 @@
 - 🔲 `pkgbuild/PKGBUILD` con dependencias: `qt6-base`, `qtkeychain-qt6`.
 - 🔲 Instalar `.desktop` para autostart del daemon.
 - 🔲 `provides=('omado')`, `conflicts=('omado-git')`.
+- ✅ `install.sh` y `PKGBUILD` configurados para versión 1.2.
+
+---
+
+## Hito 5 — v1.2: Reconocimiento de Lenguaje Natural y Mejoras de Vista
+- ✅ Parser en C++ de fechas y horas en lenguaje natural (bilingüe español/inglés).
+- ✅ Limpieza automática del título de la tarea extrayendo las expresiones temporales.
+- ✅ Badges de vista previa en tiempo real en la barra de creación (`InputBar.qml`).
+- ✅ Inclusión automática de tareas con recordatorio para el día de hoy en la vista *My Day*.
+- ✅ Botón conmutador para ocultar/mostrar tareas completadas globalmente con persistencia en `QSettings`.
 
 ---
 
@@ -207,3 +217,4 @@
 | v0.2.0-alpha | 2 (notificaciones + daemon D-Bus) | ✅ |
 | v1.0.0 | 3 (sync MS To Do opcional) | ✅ |
 | v1.1.0 | 4 (plugin de panel Quickshell) | ✅ |
+| v1.2.0 | 5 (parser NLP, filtro completadas, recordatorios en My Day) | ✅ |
