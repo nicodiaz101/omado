@@ -59,6 +59,58 @@ Item {
 
                         Item { Layout.fillWidth: true }
 
+                        // Filter Button: Hide / Show completed tasks
+                        Rectangle {
+                            id: filterToggleBtn
+                            height: 22
+                            width: 22
+                            radius: 11
+                            color: TaskModel.hideCompleted
+                                   ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+                                   : (mouseAreaFilter.containsMouse ? Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.08) : Qt.rgba(Theme.border.r, Theme.border.g, Theme.border.b, 0.25))
+                            border.color: TaskModel.hideCompleted ? Theme.accent : (mouseAreaFilter.containsMouse ? Theme.border : "transparent")
+                            border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                name: TaskModel.hideCompleted ? "eye-off" : "eye"
+                                size: 13
+                                color: TaskModel.hideCompleted ? Theme.accent : Theme.foreground
+                                opacity: TaskModel.hideCompleted ? 1.0 : (mouseAreaFilter.containsMouse ? 0.9 : 0.6)
+                            }
+
+                            MouseArea {
+                                id: mouseAreaFilter
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: TaskModel.hideCompleted = !TaskModel.hideCompleted
+                            }
+
+                            ToolTip {
+                                id: filterToolTip
+                                visible: mouseAreaFilter.containsMouse
+                                delay: 300
+                                text: TaskModel.hideCompleted ? qsTr("Show completed tasks") : qsTr("Hide completed tasks")
+
+                                contentItem: Text {
+                                    text: filterToolTip.text
+                                    font.family: "iA Writer Mono"
+                                    font.pixelSize: 11
+                                    color: Theme.foreground
+                                }
+                                background: Rectangle {
+                                    color: Theme.surface
+                                    border.color: Theme.border
+                                    border.width: 1
+                                    radius: 4
+                                }
+                            }
+                        }
+
                         // Count Badge
                         Rectangle {
                             height: 22

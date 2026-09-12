@@ -15,6 +15,7 @@
 #include <QQmlApplicationEngine>
 #include <QFontDatabase>
 #include <QDebug>
+#include <QTextStream>
 
 int main(int argc, char *argv[])
 {
@@ -24,6 +25,9 @@ int main(int argc, char *argv[])
         if (arg == "--daemon" || arg == "-d") {
             isDaemon = true;
             break;
+        } else if (arg == "--version" || arg == "-v") {
+            QTextStream(stdout) << "OmaDo v1.2.0" << Qt::endl;
+            return 0;
         }
     }
 
@@ -31,6 +35,7 @@ int main(int argc, char *argv[])
         QCoreApplication app(argc, argv);
         app.setOrganizationName("omacom-io");
         app.setApplicationName("OmaDo");
+        app.setApplicationVersion("1.2.0");
 
         Database db;
         if (!db.initialize()) {
@@ -70,6 +75,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setOrganizationName("omacom-io");
     app.setApplicationName("OmaDo");
+    app.setApplicationVersion("1.2.0");
 
     // Cargar fuente
     int fontId = QFontDatabase::addApplicationFont(":/qt/qml/OmaDo/fonts/iAWriterMono-Regular.ttf");

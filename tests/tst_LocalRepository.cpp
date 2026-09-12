@@ -270,6 +270,43 @@ private slots:
         m_repo->deleteTask(created.id).result();
         m_repo->deleteList(list.id).result();
     }
+
+    void testFetchMyDayWithReminders() {
+        TaskList list = m_repo->createList("Lista MyDay Reminders").result();
+
+        // 1. Tarea con recordatorio para hoy pero is_my_day = false y sin due_date
+        Task tToday;
+        tToday.listId = list.id;
+        tToday.title = "Tarea recordatorio hoy";
+        tToday.isMyDay = false;
+        tToday.reminderAt = QDateTime(QDate::currentDate(), QTime(15, 30));
+        Task createdToday = m_repo->createTask(tToday).result();
+
+        // 2. Tarea con recordatorio para mañana y is_my_day = false y sin due_date
+        Task tTomorrow;
+        tTomorrow.listId = list.id;
+        tTomorrow.title = "Tarea recordatorio manana";
+        tTomorrow.isMyDay = false;
+        tTomorrow.reminderAt = QDateTime(QDate::currentDate().addDays(1), QTime(10, 0));
+        Task createdTomorrow = m_repo->createTask(tTomorrow).result();
+
+        // 3. Obtener My Day tasks
+        QList<Task> myDayTasks = m_repo->fetchMyDayTasks().result();
+        bool foundToday = false;
+        bool foundTomorrow = false;
+        for (const Task &t : myDayTasks) {
+            if (t.id == createdToday.id) foundToday = true;
+            if (t.id == createdTomorrow.id) foundTomorrow = true;
+        }
+
+        QVERIFY(foundToday);
+        QVERIFY(!foundTomorrow);
+
+        // Limpieza
+        m_repo->deleteTask(createdToday.id).result();
+        m_repo->deleteTask(createdTomorrow.id).result();
+        m_repo->deleteList(list.id).result();
+    }
 };
 
 QTEST_MAIN(tst_LocalRepository)

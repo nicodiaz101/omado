@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(omado VERSION 1.1.0 LANGUAGES CXX)
+project(omado VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,6 +24,7 @@ add_library(omado_lib STATIC
     src/models/LocalRepository.cpp
     src/models/TaskListModel.cpp
     src/models/TaskModel.cpp
+    src/core/TaskInputParser.cpp
 )
 target_include_directories(omado_lib PUBLIC src/)
 target_link_libraries(omado_lib PUBLIC
@@ -56,6 +57,8 @@ qt_add_qml_module(omado
         icons/alarm.svg
         icons/calendar.svg
         icons/close.svg
+        icons/eye.svg
+        icons/eye-off.svg
         icons/list.svg
         icons/omado.svg
         icons/plus.svg

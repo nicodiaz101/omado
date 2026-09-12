@@ -14,6 +14,8 @@ Rectangle {
     property string draftReminderAt: ""
     property string draftRecurrence: "none"
     property var draftSteps: []
+    property var parsedDraft: (root.draftDueDate === "" && root.draftReminderAt === "" && taskInput.text.trim().length > 0)
+                              ? TaskModel.parseInput(taskInput.text) : null
 
     function focusInput() {
         taskInput.forceActiveFocus()
@@ -73,9 +75,9 @@ Rectangle {
         // Active filters/draft badges preview
         Row {
             spacing: 6
-            visible: root.draftDueDate !== "" || root.draftRecurrence !== "none" || root.draftSteps.length > 0
+            visible: root.draftDueDate !== "" || root.draftReminderAt !== "" || root.draftRecurrence !== "none" || root.draftSteps.length > 0 || (root.parsedDraft !== null && root.parsedDraft !== undefined && (root.parsedDraft.hasDueDate || root.parsedDraft.hasReminder))
 
-            // Due date badge
+            // Due date badge (manual)
             Rectangle {
                 visible: root.draftDueDate !== ""
                 height: 20
@@ -90,6 +92,80 @@ Rectangle {
                     color: Theme.accent
                     font.family: "iA Writer Mono"
                     font.pixelSize: 10
+                }
+            }
+
+            // Reminder badge (manual)
+            Rectangle {
+                visible: root.draftReminderAt !== ""
+                height: 20
+                width: badgeReminderText.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+
+                Text {
+                    id: badgeReminderText
+                    anchors.centerIn: parent
+                    text: root.draftReminderAt
+                    color: Theme.accent
+                    font.family: "iA Writer Mono"
+                    font.pixelSize: 10
+                }
+            }
+
+            // Live parsed due date badge
+            Rectangle {
+                visible: root.draftDueDate === "" && root.parsedDraft !== null && root.parsedDraft !== undefined && root.parsedDraft.hasDueDate
+                height: 20
+                width: parsedDateRow.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+
+                Row {
+                    id: parsedDateRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    AppIcon {
+                        name: "calendar"
+                        size: 11
+                        color: Theme.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: (root.parsedDraft && root.parsedDraft.dueDate) ? root.parsedDraft.dueDate : ""
+                        color: Theme.accent
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            // Live parsed reminder badge
+            Rectangle {
+                visible: root.draftReminderAt === "" && root.parsedDraft !== null && root.parsedDraft !== undefined && root.parsedDraft.hasReminder
+                height: 20
+                width: parsedReminderRow.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+
+                Row {
+                    id: parsedReminderRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    AppIcon {
+                        name: "alarm"
+                        size: 11
+                        color: Theme.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: (root.parsedDraft && root.parsedDraft.reminderTime) ? root.parsedDraft.reminderTime : ""
+                        color: Theme.accent
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
 
