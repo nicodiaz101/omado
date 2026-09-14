@@ -15,15 +15,17 @@ Item {
         if (TaskModel.currentListId === "special-schedule") return qsTr("Schedule")
         if (TaskModel.currentListId === "special-tasks") return qsTr("Tasks")
         
-        // Find custom list display name
-        for (var i = 0; i < TaskListModel.rowCount(); ++i) {
-            var idx = TaskListModel.index(i, 0)
-            var id = TaskListModel.data(idx, 257) // IdRole
-            if (id === TaskModel.currentListId) {
-                return TaskListModel.data(idx, 258) // DisplayNameRole
-            }
-        }
+        var name = TaskListModel.getListName(TaskModel.currentListId)
+        if (name && name !== "") return name
         return qsTr("Tasks")
+    }
+
+    function getListIcon() {
+        if (TaskModel.currentListId === "special-myday") return ""
+        if (TaskModel.currentListId === "special-schedule") return ""
+        if (TaskModel.currentListId === "special-tasks") return ""
+        
+        return TaskListModel.getListIcon(TaskModel.currentListId)
     }
 
     RowLayout {
@@ -48,6 +50,14 @@ Item {
                         anchors.fill: parent
                         anchors.leftMargin: 20
                         anchors.rightMargin: 20
+                        spacing: 8
+
+                        Text {
+                            visible: root.getListIcon() !== ""
+                            text: root.getListIcon()
+                            font.pixelSize: 20
+                            Layout.alignment: Qt.AlignVCenter
+                        }
 
                         Text {
                             text: root.getListTitle()
@@ -55,6 +65,7 @@ Item {
                             font.family: "iA Writer Mono"
                             font.pixelSize: 18
                             font.bold: true
+                            Layout.alignment: Qt.AlignVCenter
                         }
 
                         Item { Layout.fillWidth: true }

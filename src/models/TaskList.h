@@ -1,5 +1,6 @@
 #pragma once
 #include <QString>
+#include <QDateTime>
 #include <QtDBus/QDBusArgument>
 #include <QMetaType>
 
@@ -9,6 +10,7 @@ struct TaskList {
     bool     isSpecial   = false;
     int      sortOrder   = 0;
     QString  remoteId;
+    QDateTime syncedAt;
     
     bool isSynced() const { return !remoteId.isEmpty(); }
 };

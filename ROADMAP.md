@@ -209,6 +209,17 @@
 
 ---
 
+## Hito 6 — v1.3: Personalización de Listas de Tareas (Iconos/Emojis y Renombrado)
+- ✅ Unificación del icono por defecto de lista y el emoji/icono personalizado en un solo slot visual en el panel lateral.
+- ✅ Menú contextual nativo de Omarchy (`ListContextMenu.qml`) al hacer click derecho sobre cualquier lista personalizada (Cambiar icono, Renombrar lista, Eliminar lista).
+- ✅ Selector visual de iconos/emojis (`ListIconPickerPopup.qml`) con estilo Omarchy y categorías compatibles con Microsoft To Do (General, Trabajo, Hogar, Ocio, Símbolos).
+- ✅ Opción para restablecer el icono al default (3 rayas) o escribir/pegar cualquier emoji Unicode personalizado.
+- ✅ Renombrado de listas directamente en línea o vía diálogo con preservación de icono y sincronización bidireccional vía Microsoft Graph API.
+- ✅ Integración y visualización del icono de la lista activa en el encabezado principal de `TaskView.qml`.
+- ✅ Tests unitarios completos para parseo, roles del modelo, renombrado y actualización de iconos en `tst_TaskListModel.cpp`.
+
+---
+
 ## Tabla de Versiones
 
 | Versión | Hitos completados | Estado |
@@ -218,3 +229,4 @@
 | v1.0.0 | 3 (sync MS To Do opcional) | ✅ |
 | v1.1.0 | 4 (plugin de panel Quickshell) | ✅ |
 | v1.2.0 | 5 (parser NLP, filtro completadas, recordatorios en My Day) | ✅ |
+| v1.3.0 | 6 (personalización de listas, iconos/emojis, menú contextual) | ✅ |

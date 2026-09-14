@@ -45,6 +45,7 @@ public:
 
     QString getListRemoteId(const QString &localListId);
     QFuture<bool> updateListRemoteId(const QString &listId, const QString &remoteId);
+    QFuture<bool> markListSynced(const QString &listId);
     QFuture<bool> updateTaskRemoteId(const QString &taskId, const QString &remoteId);
     QFuture<bool> markTaskSynced(const QString &taskId);
     QFuture<QList<DeletedTaskRecord>> fetchDeletedTasks();

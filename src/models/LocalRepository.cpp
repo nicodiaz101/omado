@@ -26,6 +26,15 @@ static QSqlDatabase getThreadDb() {
     return db;
 }
 
+static QDateTime parseIsoDateTime(const QString &str) {
+    if (str.isEmpty()) return QDateTime();
+    QDateTime dt = QDateTime::fromString(str, Qt::ISODateWithMs);
+    if (!dt.isValid()) {
+        dt = QDateTime::fromString(str, Qt::ISODate);
+    }
+    return dt;
+}
+
 static TaskList mapToTaskList(const QSqlQuery &q) {
     TaskList l;
     l.id = q.value("id").toString();
@@ -33,6 +42,8 @@ static TaskList mapToTaskList(const QSqlQuery &q) {
     l.isSpecial = q.value("is_special").toBool();
     l.sortOrder = q.value("sort_order").toInt();
     l.remoteId = q.value("remote_id").toString();
+    QString syncedStr = q.value("synced_at").toString();
+    if (!syncedStr.isEmpty()) l.syncedAt = parseIsoDateTime(syncedStr);
     return l;
 }
 
@@ -53,15 +64,6 @@ static QList<TaskStep> loadStepsForTask(const QString &taskId, QSqlDatabase &db)
         }
     }
     return steps;
-}
-
-static QDateTime parseIsoDateTime(const QString &str) {
-    if (str.isEmpty()) return QDateTime();
-    QDateTime dt = QDateTime::fromString(str, Qt::ISODateWithMs);
-    if (!dt.isValid()) {
-        dt = QDateTime::fromString(str, Qt::ISODate);
-    }
-    return dt;
 }
 
 static Task mapToTask(const QSqlQuery &q, QSqlDatabase &db) {
@@ -107,7 +109,7 @@ QFuture<QList<TaskList>> LocalRepository::fetchLists() {
     return QtConcurrent::run([]() {
         QList<TaskList> lists;
         QSqlDatabase db = getThreadDb();
-        QSqlQuery q("SELECT id, display_name, is_special, sort_order, remote_id FROM task_lists ORDER BY sort_order ASC, created_at ASC", db);
+        QSqlQuery q("SELECT id, display_name, is_special, sort_order, remote_id, synced_at FROM task_lists ORDER BY sort_order ASC, created_at ASC", db);
         while (q.next()) lists.append(mapToTaskList(q));
         return lists;
     });
@@ -338,7 +340,7 @@ QFuture<bool> LocalRepository::updateList(const TaskList &list) {
     return QtConcurrent::run([list]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
-        q.prepare("UPDATE task_lists SET display_name = :name, sort_order = :sort WHERE id = :id");
+        q.prepare("UPDATE task_lists SET display_name = :name, sort_order = :sort, synced_at = NULL WHERE id = :id");
         q.bindValue(":id", list.id);
         q.bindValue(":name", list.displayName);
         q.bindValue(":sort", list.sortOrder);
@@ -497,6 +499,17 @@ QFuture<bool> LocalRepository::updateListRemoteId(const QString &listId, const Q
     });
 }
 
+QFuture<bool> LocalRepository::markListSynced(const QString &listId) {
+    return QtConcurrent::run([listId]() {
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("UPDATE task_lists SET synced_at = :now WHERE id = :id");
+        q.bindValue(":now", QDateTime::currentDateTime().toString(Qt::ISODate));
+        q.bindValue(":id", listId);
+        return q.exec();
+    });
+}
+
 QFuture<bool> LocalRepository::updateTaskRemoteId(const QString &taskId, const QString &remoteId) {
     return QtConcurrent::run([taskId, remoteId]() {
         QSqlDatabase db = getThreadDb();
@@ -549,7 +562,7 @@ QFuture<TaskList> LocalRepository::fetchListByRemoteId(const QString &remoteId) 
         TaskList l;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
-        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
+        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id, synced_at FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
         q.bindValue(":remote_id", remoteId);
         if (q.exec() && q.next()) {
             l = mapToTaskList(q);
@@ -577,7 +590,7 @@ QFuture<TaskList> LocalRepository::upsertRemoteList(const QString &remoteId, con
         TaskList l;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
-        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
+        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id, synced_at FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
         q.bindValue(":remote_id", remoteId);
         if (q.exec() && q.next()) {
             l = mapToTaskList(q);

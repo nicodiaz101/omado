@@ -12,6 +12,8 @@ public:
     enum Roles { 
         IdRole = Qt::UserRole + 1, 
         DisplayNameRole, 
+        NameRole,
+        IconRole,
         IsSpecialRole, 
         SortOrderRole, 
         PendingCountRole 
@@ -26,9 +28,15 @@ public:
     void setGraphClient(GraphClient *graph) { m_graph = graph; }
     void setSyncEngine(SyncEngine *sync) { m_sync = sync; }
 
+    static void parseDisplayName(const QString &raw, QString &outEmoji, QString &outCleanName);
+
     Q_INVOKABLE void loadLists();
-    Q_INVOKABLE void createList(const QString &name);
+    Q_INVOKABLE void createList(const QString &name, const QString &icon = QString());
+    Q_INVOKABLE void renameList(const QString &id, const QString &newName);
+    Q_INVOKABLE void setListIcon(const QString &id, const QString &emoji);
     Q_INVOKABLE void deleteList(const QString &id);
+    Q_INVOKABLE QString getListIcon(const QString &id) const;
+    Q_INVOKABLE QString getListName(const QString &id) const;
     
 private:
     LocalRepository *m_repo = nullptr;
