@@ -14,6 +14,7 @@ class TaskModel : public QAbstractListModel {
     Q_PROPERTY(QVariantMap selectedTask READ selectedTask NOTIFY selectedTaskChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     Q_PROPERTY(bool hideCompleted READ hideCompleted WRITE setHideCompleted NOTIFY hideCompletedChanged)
+    Q_PROPERTY(bool sortByDueDate READ sortByDueDate WRITE setSortByDueDate NOTIFY sortByDueDateChanged)
 
 public:
     enum Roles { 
@@ -53,6 +54,9 @@ public:
     bool hideCompleted() const { return m_hideCompleted; }
     void setHideCompleted(bool hide);
 
+    bool sortByDueDate() const { return m_sortByDueDate; }
+    void setSortByDueDate(bool sort);
+
     Q_INVOKABLE void loadTasks();
     Q_INVOKABLE QVariantMap parseInput(const QString &text) const;
     Q_INVOKABLE void addTask(const QString &title, const QString &dueDate = "", const QString &reminderAt = "", const QString &recurrence = "none");
@@ -76,6 +80,7 @@ signals:
     void selectedTaskChanged();
     void countChanged();
     void hideCompletedChanged();
+    void sortByDueDateChanged();
 
 private:
     LocalRepository *m_repo = nullptr;
@@ -84,6 +89,7 @@ private:
     QString m_currentListId;
     int m_selectedIndex = -1;
     bool m_hideCompleted = false;
+    bool m_sortByDueDate = false;
     QList<Task> m_tasks;
     QList<int> m_visibleIndices;
     QFutureWatcher<QList<Task>> m_watcher;

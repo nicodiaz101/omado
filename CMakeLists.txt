@@ -58,6 +58,7 @@ qt_add_qml_module(omado
         fonts/iAWriterMono-Regular.ttf
         fonts/iAWriterMono-Bold.ttf
         icons/alarm.svg
+        icons/arrow-down-up.svg
         icons/calendar.svg
         icons/close.svg
         icons/eye.svg

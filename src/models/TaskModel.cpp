@@ -5,6 +5,7 @@
 #include <QUuid>
 #include <QDebug>
 #include <QSettings>
+#include <algorithm>
 
 static QDateTime parseDateTimeLocal(const QString &str) {
     if (str.trimmed().isEmpty()) return QDateTime();
@@ -21,10 +22,67 @@ static QDateTime parseDateTimeLocal(const QString &str) {
     return QDateTime();
 }
 
+static bool getTaskSortKey(const Task &t, QDateTime &outDt) {
+    bool hasDue = t.dueDate.isValid();
+    bool hasReminder = t.reminderAt.isValid();
+
+    if (!hasDue && !hasReminder) {
+        return false;
+    }
+
+    if (hasDue && hasReminder) {
+        QDateTime dueDt(t.dueDate, QTime(23, 59, 59));
+        QDateTime remDt = t.reminderAt.toLocalTime();
+        outDt = std::min(dueDt, remDt);
+    } else if (hasReminder) {
+        outDt = t.reminderAt.toLocalTime();
+    } else {
+        outDt = QDateTime(t.dueDate, QTime(23, 59, 59));
+    }
+    return true;
+}
+
+static bool compareTasksByDueDate(const Task &t1, const Task &t2) {
+    // 1. Incomplete tasks before completed tasks
+    if (t1.isCompleted != t2.isCompleted) {
+        return !t1.isCompleted;
+    }
+
+    // 2. Deadlines/reminders
+    QDateTime dt1, dt2;
+    bool has1 = getTaskSortKey(t1, dt1);
+    bool has2 = getTaskSortKey(t2, dt2);
+
+    if (has1 && has2) {
+        if (dt1 != dt2) {
+            return dt1 < dt2;
+        }
+        if (t1.importance != t2.importance) {
+            return t1.importance == "high";
+        }
+        return false;
+    }
+
+    if (has1 && !has2) {
+        return true;
+    }
+    if (!has1 && has2) {
+        return false;
+    }
+
+    // Neither has date/reminder
+    if (t1.importance != t2.importance) {
+        return t1.importance == "high";
+    }
+
+    return false;
+}
+
 TaskModel::TaskModel(LocalRepository *repo, GraphClient *graph, SyncEngine *sync, QObject *parent)
     : QAbstractListModel(parent), m_repo(repo), m_graph(graph), m_sync(sync) {
     QSettings settings("omacom-io", "OmaDo");
     m_hideCompleted = settings.value("ui/hideCompleted", false).toBool();
+    m_sortByDueDate = settings.value("ui/sortByDueDate", false).toBool();
 
     connect(&m_watcher, &QFutureWatcher<QList<Task>>::finished, this, [this]() {
         beginResetModel();
@@ -40,25 +98,22 @@ TaskModel::TaskModel(LocalRepository *repo, GraphClient *graph, SyncEngine *sync
 
 void TaskModel::rebuildVisibleIndices() {
     m_visibleIndices.clear();
-    if (!m_hideCompleted) {
-        return;
-    }
     for (int i = 0; i < m_tasks.count(); ++i) {
-        if (!m_tasks[i].isCompleted) {
-            m_visibleIndices.append(i);
+        if (m_hideCompleted && m_tasks[i].isCompleted) {
+            continue;
         }
+        m_visibleIndices.append(i);
+    }
+    if (m_sortByDueDate) {
+        std::stable_sort(m_visibleIndices.begin(), m_visibleIndices.end(), [this](int a, int b) {
+            return compareTasksByDueDate(m_tasks[a], m_tasks[b]);
+        });
     }
 }
 
 int TaskModel::actualIndex(int row) const {
-    if (m_hideCompleted) {
-        if (row >= 0 && row < m_visibleIndices.count()) {
-            return m_visibleIndices.at(row);
-        }
-        return -1;
-    }
-    if (row >= 0 && row < m_tasks.count()) {
-        return row;
+    if (row >= 0 && row < m_visibleIndices.count()) {
+        return m_visibleIndices.at(row);
     }
     return -1;
 }
@@ -69,13 +124,63 @@ void TaskModel::setHideCompleted(bool hide) {
     QSettings settings("omacom-io", "OmaDo");
     settings.setValue("ui/hideCompleted", hide);
 
+    QString selId;
+    int actIdx = actualIndex(m_selectedIndex);
+    if (actIdx >= 0 && actIdx < m_tasks.count()) {
+        selId = m_tasks[actIdx].id;
+    }
+
     beginResetModel();
     m_hideCompleted = hide;
     rebuildVisibleIndices();
-    m_selectedIndex = -1;
+    if (!selId.isEmpty()) {
+        m_selectedIndex = -1;
+        for (int i = 0; i < m_visibleIndices.count(); ++i) {
+            if (m_tasks[m_visibleIndices[i]].id == selId) {
+                m_selectedIndex = i;
+                break;
+            }
+        }
+    } else {
+        m_selectedIndex = -1;
+    }
     endResetModel();
 
     emit hideCompletedChanged();
+    emit selectedIndexChanged();
+    emit selectedTaskChanged();
+    emit countChanged();
+}
+
+void TaskModel::setSortByDueDate(bool sort) {
+    if (m_sortByDueDate == sort) return;
+
+    QSettings settings("omacom-io", "OmaDo");
+    settings.setValue("ui/sortByDueDate", sort);
+
+    QString selId;
+    int actIdx = actualIndex(m_selectedIndex);
+    if (actIdx >= 0 && actIdx < m_tasks.count()) {
+        selId = m_tasks[actIdx].id;
+    }
+
+    beginResetModel();
+    m_sortByDueDate = sort;
+    rebuildVisibleIndices();
+    if (!selId.isEmpty()) {
+        m_selectedIndex = -1;
+        for (int i = 0; i < m_visibleIndices.count(); ++i) {
+            if (m_tasks[m_visibleIndices[i]].id == selId) {
+                m_selectedIndex = i;
+                break;
+            }
+        }
+    } else {
+        m_selectedIndex = -1;
+    }
+    endResetModel();
+
+    emit sortByDueDateChanged();
     emit selectedIndexChanged();
     emit selectedTaskChanged();
     emit countChanged();
@@ -124,7 +229,7 @@ QVariantMap TaskModel::selectedTask() const {
 
 int TaskModel::rowCount(const QModelIndex &parent) const {
     if (parent.isValid()) return 0;
-    return m_hideCompleted ? m_visibleIndices.count() : m_tasks.count();
+    return m_visibleIndices.count();
 }
 
 QVariant TaskModel::data(const QModelIndex &index, int role) const {
@@ -288,16 +393,40 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
         }
     }
     
-    beginInsertRows(QModelIndex(), 0, 0);
-    m_tasks.insert(0, t);
-    rebuildVisibleIndices();
-    if (m_selectedIndex >= 0) {
-        m_selectedIndex++;
+    if (m_sortByDueDate) {
+        QString selId;
+        int actIdx = actualIndex(m_selectedIndex);
+        if (actIdx >= 0 && actIdx < m_tasks.count()) {
+            selId = m_tasks[actIdx].id;
+        }
+        beginResetModel();
+        m_tasks.insert(0, t);
+        rebuildVisibleIndices();
+        if (!selId.isEmpty()) {
+            m_selectedIndex = -1;
+            for (int i = 0; i < m_visibleIndices.count(); ++i) {
+                if (m_tasks[m_visibleIndices[i]].id == selId) {
+                    m_selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        endResetModel();
+        emit countChanged();
+        emit selectedIndexChanged();
+        emit selectedTaskChanged();
+    } else {
+        beginInsertRows(QModelIndex(), 0, 0);
+        m_tasks.insert(0, t);
+        rebuildVisibleIndices();
+        if (m_selectedIndex >= 0) {
+            m_selectedIndex++;
+        }
+        endInsertRows();
+        emit countChanged();
+        emit selectedIndexChanged();
+        emit selectedTaskChanged();
     }
-    endInsertRows();
-    emit countChanged();
-    emit selectedIndexChanged();
-    emit selectedTaskChanged();
     
     m_repo->createTask(t);
     if (m_sync) {
@@ -337,6 +466,27 @@ void TaskModel::toggleTaskCompletion(int row) {
             emit selectedTaskChanged();
             emit countChanged();
         }
+    } else if (m_sortByDueDate) {
+        QString selId;
+        int currentAct = actualIndex(m_selectedIndex);
+        if (currentAct >= 0 && currentAct < m_tasks.count()) {
+            selId = m_tasks[currentAct].id;
+        }
+        beginResetModel();
+        rebuildVisibleIndices();
+        if (!selId.isEmpty()) {
+            m_selectedIndex = -1;
+            for (int i = 0; i < m_visibleIndices.count(); ++i) {
+                if (m_tasks[m_visibleIndices[i]].id == selId) {
+                    m_selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        endResetModel();
+        emit selectedIndexChanged();
+        emit selectedTaskChanged();
+        emit countChanged();
     } else {
         notifyRowChanged(row);
     }
@@ -358,7 +508,30 @@ void TaskModel::toggleTaskImportance(int row) {
     int actIdx = actualIndex(row);
     if (actIdx < 0 || actIdx >= m_tasks.count() || !m_repo) return;
     m_tasks[actIdx].importance = (m_tasks[actIdx].importance == "high") ? "normal" : "high";
-    notifyRowChanged(row);
+    
+    if (m_sortByDueDate) {
+        QString selId;
+        int currentAct = actualIndex(m_selectedIndex);
+        if (currentAct >= 0 && currentAct < m_tasks.count()) {
+            selId = m_tasks[currentAct].id;
+        }
+        beginResetModel();
+        rebuildVisibleIndices();
+        if (!selId.isEmpty()) {
+            m_selectedIndex = -1;
+            for (int i = 0; i < m_visibleIndices.count(); ++i) {
+                if (m_tasks[m_visibleIndices[i]].id == selId) {
+                    m_selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        endResetModel();
+        emit selectedIndexChanged();
+        emit selectedTaskChanged();
+    } else {
+        notifyRowChanged(row);
+    }
     m_repo->updateTask(m_tasks[actIdx]);
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {
@@ -427,7 +600,30 @@ void TaskModel::updateTaskDueDate(int row, const QString &dueDate) {
     } else {
         m_tasks[actIdx].dueDate = QDate::fromString(dueDate, Qt::ISODate);
     }
-    notifyRowChanged(row);
+
+    if (m_sortByDueDate) {
+        QString selId;
+        int currentAct = actualIndex(m_selectedIndex);
+        if (currentAct >= 0 && currentAct < m_tasks.count()) {
+            selId = m_tasks[currentAct].id;
+        }
+        beginResetModel();
+        rebuildVisibleIndices();
+        if (!selId.isEmpty()) {
+            m_selectedIndex = -1;
+            for (int i = 0; i < m_visibleIndices.count(); ++i) {
+                if (m_tasks[m_visibleIndices[i]].id == selId) {
+                    m_selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        endResetModel();
+        emit selectedIndexChanged();
+        emit selectedTaskChanged();
+    } else {
+        notifyRowChanged(row);
+    }
     m_repo->updateTask(m_tasks[actIdx]);
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {
@@ -450,7 +646,30 @@ void TaskModel::updateTaskReminder(int row, const QString &reminderAt) {
         m_tasks[actIdx].reminderAt = parseDateTimeLocal(reminderAt);
     }
     m_tasks[actIdx].reminded = false;
-    notifyRowChanged(row);
+
+    if (m_sortByDueDate) {
+        QString selId;
+        int currentAct = actualIndex(m_selectedIndex);
+        if (currentAct >= 0 && currentAct < m_tasks.count()) {
+            selId = m_tasks[currentAct].id;
+        }
+        beginResetModel();
+        rebuildVisibleIndices();
+        if (!selId.isEmpty()) {
+            m_selectedIndex = -1;
+            for (int i = 0; i < m_visibleIndices.count(); ++i) {
+                if (m_tasks[m_visibleIndices[i]].id == selId) {
+                    m_selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        endResetModel();
+        emit selectedIndexChanged();
+        emit selectedTaskChanged();
+    } else {
+        notifyRowChanged(row);
+    }
     m_repo->updateTask(m_tasks[actIdx]);
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {

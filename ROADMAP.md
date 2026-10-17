@@ -216,7 +216,8 @@
 - ✅ Opción para restablecer el icono al default (3 rayas) o escribir/pegar cualquier emoji Unicode personalizado.
 - ✅ Renombrado de listas directamente en línea o vía diálogo con preservación de icono y sincronización bidireccional vía Microsoft Graph API.
 - ✅ Integración y visualización del icono de la lista activa en el encabezado principal de `TaskView.qml`.
-- ✅ Tests unitarios completos para parseo, roles del modelo, renombrado y actualización de iconos en `tst_TaskListModel.cpp`.
+- ✅ Botón conmutador minimalista para ordenar tareas cronológicamente por fecha de vencimiento y recordatorio más próximo con persistencia en `QSettings`.
+- ✅ Tests unitarios completos para parseo, roles del modelo, ordenamiento cronológico, renombrado y actualización de iconos en `tst_TaskListModel.cpp` y `tst_TaskModel.cpp`.
 
 ---
 
