@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QFuture>
+#include <QThreadPool>
 #include "TaskList.h"
 #include "Task.h"
 #include "TaskStep.h"
@@ -10,6 +11,7 @@ class LocalRepository : public QObject {
     Q_OBJECT
 public:
     explicit LocalRepository(QObject *parent = nullptr);
+    ~LocalRepository() override;
 
     QFuture<QList<TaskList>> fetchLists();
     QFuture<QList<Task>> fetchTasks(const QString &listId);
@@ -54,5 +56,8 @@ public:
     QFuture<Task> fetchTaskByRemoteId(const QString &remoteId);
     QFuture<TaskList> upsertRemoteList(const QString &remoteId, const QString &displayName);
     QFuture<Task> upsertRemoteTask(const QString &localListId, const Task &task);
+
+private:
+    QThreadPool m_threadPool;
 };
 

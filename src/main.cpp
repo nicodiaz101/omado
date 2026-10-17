@@ -77,12 +77,19 @@ int main(int argc, char *argv[])
     app.setApplicationName("OmaDo");
     app.setApplicationVersion("1.3.0");
 
-    // Cargar fuente
+    // Cargar fuentes
     int fontId = QFontDatabase::addApplicationFont(":/qt/qml/OmaDo/fonts/iAWriterMono-Regular.ttf");
     if (fontId == -1) {
         fontId = QFontDatabase::addApplicationFont(":/OmaDo/fonts/iAWriterMono-Regular.ttf"); // fallback Qt < 6.5
         if (fontId == -1) {
             qWarning() << "No se pudo cargar iAWriterMono-Regular.ttf";
+        }
+    }
+    int boldFontId = QFontDatabase::addApplicationFont(":/qt/qml/OmaDo/fonts/iAWriterMono-Bold.ttf");
+    if (boldFontId == -1) {
+        boldFontId = QFontDatabase::addApplicationFont(":/OmaDo/fonts/iAWriterMono-Bold.ttf"); // fallback Qt < 6.5
+        if (boldFontId == -1) {
+            qWarning() << "No se pudo cargar iAWriterMono-Bold.ttf";
         }
     }
 

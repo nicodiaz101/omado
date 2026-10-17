@@ -561,10 +561,6 @@ Rectangle {
         id: listIconPickerPopup
     }
 
-    ListRenameDialog {
-        id: listRenameDialog
-    }
-
     Component.onCompleted: {
         TaskListModel.loadLists()
         TaskModel.currentListId = "special-myday"

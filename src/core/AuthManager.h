@@ -32,6 +32,7 @@ public:
     Q_INVOKABLE void checkSavedCredentials(std::function<void(bool success)> callback = nullptr);
 
     void ensureValidToken(std::function<void(const QString &accessToken, bool success)> callback);
+    QNetworkAccessManager *networkAccessManager();
 
     static QString generateCodeVerifier();
     static QString generateCodeChallenge(const QString &verifier);

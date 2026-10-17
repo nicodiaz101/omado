@@ -238,11 +238,6 @@ QVariant TaskModel::data(const QModelIndex &index, int role) const {
     if (actIdx < 0 || actIdx >= m_tasks.count()) return QVariant();
     const Task &t = m_tasks.at(actIdx);
 
-    int completedSteps = 0;
-    for (const auto &s : t.steps) {
-        if (s.isCompleted) completedSteps++;
-    }
-
     switch(role) {
         case IdRole: return t.id;
         case ListIdRole: return t.listId;
@@ -261,7 +256,13 @@ QVariant TaskModel::data(const QModelIndex &index, int role) const {
         }
         case HasStepsRole: return !t.steps.isEmpty();
         case StepsCountRole: return t.steps.count();
-        case CompletedStepsCountRole: return completedSteps;
+        case CompletedStepsCountRole: {
+            int completedSteps = 0;
+            for (const auto &s : t.steps) {
+                if (s.isCompleted) completedSteps++;
+            }
+            return completedSteps;
+        }
         default: return QVariant();
     }
 }

@@ -25,7 +25,7 @@ SyncEngine::SyncEngine(AuthManager *auth, GraphClient *graph, LocalRepository *r
         bus.connect("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "TasksChanged",
                     this, SLOT(onRemoteTasksChanged(QString)));
         bus.connect("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "TodayTasksChanged",
-                    this, SLOT(onRemoteTasksChanged(QString)));
+                    this, SLOT(onRemoteTodayTasksChanged()));
     }
 
     if (m_auth) {
@@ -67,6 +67,10 @@ void SyncEngine::onRemoteSyncFinished(bool success, const QString &message) {
 }
 
 void SyncEngine::onRemoteTasksChanged(const QString &) {
+    emit syncFinished(true, QStringLiteral("Actualizado por daemon"));
+}
+
+void SyncEngine::onRemoteTodayTasksChanged() {
     emit syncFinished(true, QStringLiteral("Actualizado por daemon"));
 }
 

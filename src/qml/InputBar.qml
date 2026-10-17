@@ -14,8 +14,20 @@ Rectangle {
     property string draftReminderAt: ""
     property string draftRecurrence: "none"
     property var draftSteps: []
-    property var parsedDraft: (root.draftDueDate === "" && root.draftReminderAt === "" && taskInput.text.trim().length > 0)
-                              ? TaskModel.parseInput(taskInput.text) : null
+    property var parsedDraft: null
+
+    Timer {
+        id: parseDebounceTimer
+        interval: 100
+        repeat: false
+        onTriggered: {
+            if (root.draftDueDate === "" && root.draftReminderAt === "" && taskInput.text.trim().length > 0) {
+                root.parsedDraft = TaskModel.parseInput(taskInput.text)
+            } else {
+                root.parsedDraft = null
+            }
+        }
+    }
 
     function focusInput() {
         taskInput.forceActiveFocus()
@@ -59,7 +71,18 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
             }
 
+            onTextChanged: {
+                if (text.trim().length === 0) {
+                    parseDebounceTimer.stop()
+                    root.parsedDraft = null
+                } else {
+                    parseDebounceTimer.restart()
+                }
+            }
+
             onAccepted: {
+                parseDebounceTimer.stop()
+                root.parsedDraft = null
                 if (text.trim().length > 0) {
                     TaskModel.addTaskWithSteps(text.trim(), root.draftDueDate, root.draftReminderAt, root.draftRecurrence, root.draftSteps)
                     text = ""

@@ -33,6 +33,7 @@ private slots:
     void onRemoteSyncStarted();
     void onRemoteSyncFinished(bool success, const QString &message);
     void onRemoteTasksChanged(const QString &listId);
+    void onRemoteTodayTasksChanged();
 
 private:
     void performSync();

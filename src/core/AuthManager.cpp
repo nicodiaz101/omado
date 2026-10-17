@@ -14,7 +14,7 @@
 #include <QDebug>
 
 AuthManager::AuthManager(KeychainStore *keychain, QObject *parent)
-    : QObject(parent), m_keychain(keychain), m_nam(new QNetworkAccessManager(this)) {
+    : QObject(parent), m_keychain(keychain), m_nam(nullptr) {
     
     QString envId = QProcessEnvironment::systemEnvironment().value("OMADO_CLIENT_ID");
     m_clientId = !envId.trimmed().isEmpty() ? envId.trimmed() : QString::fromLatin1(kDefaultClientId);
@@ -42,6 +42,13 @@ AuthManager::AuthManager(KeychainStore *keychain, QObject *parent)
 
 AuthManager::~AuthManager() {
     stopLocalServer();
+}
+
+QNetworkAccessManager *AuthManager::networkAccessManager() {
+    if (!m_nam) {
+        m_nam = new QNetworkAccessManager(this);
+    }
+    return m_nam;
 }
 
 void AuthManager::setClientId(const QString &id) {
@@ -98,7 +105,7 @@ void AuthManager::checkSavedCredentials(std::function<void(bool success)> callba
                 if (okName) m_userName = name;
                 emit userChanged();
                 emit authStatusChanged();
-                qDebug() << "[AuthManager] Sesión restaurada para:" << m_userEmail;
+                qDebug() << "[AuthManager] Sesión restaurada exitosamente";
                 if (callback) callback(true);
             });
         });
@@ -190,6 +197,7 @@ void AuthManager::handleNewConnection() {
         );
 
         if (!error.isEmpty()) {
+            QString safeError = (errorDesc.isEmpty() ? error : errorDesc).toHtmlEscaped();
             responseHtml = QStringLiteral(
                 "HTTP/1.1 400 Bad Request\r\n"
                 "Content-Type: text/html; charset=utf-8\r\n"
@@ -203,7 +211,7 @@ void AuthManager::handleNewConnection() {
                 "<h2>✕ Error de autenticación</h2>"
                 "<p>%1</p>"
                 "</div></body></html>"
-            ).arg(errorDesc.isEmpty() ? error : errorDesc);
+            ).arg(safeError);
         }
 
         socket->write(responseHtml.toUtf8());
@@ -218,7 +226,7 @@ void AuthManager::handleNewConnection() {
             qDebug() << "[AuthManager] Código de autorización recibido con éxito";
             exchangeCodeForTokens(code, redirectUri);
         } else {
-            qWarning() << "[AuthManager] Error en callback de autenticación:" << error << errorDesc;
+            qWarning() << "[AuthManager] Error en callback de autenticación:" << error;
             m_isAuthenticating = false;
             emit authStatusChanged();
             emit authFailed(!errorDesc.isEmpty() ? errorDesc : error);
@@ -237,14 +245,13 @@ void AuthManager::exchangeCodeForTokens(const QString &code, const QString &redi
     body.addQueryItem("redirect_uri", redirectUri);
     body.addQueryItem("code_verifier", m_codeVerifier);
 
-    QNetworkReply *reply = m_nam->post(req, body.toString(QUrl::FullyEncoded).toUtf8());
+    QNetworkReply *reply = networkAccessManager()->post(req, body.toString(QUrl::FullyEncoded).toUtf8());
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
         m_isAuthenticating = false;
 
         if (reply->error() != QNetworkReply::NoError) {
-            QString err = reply->readAll();
-            qWarning() << "[AuthManager] Error al canjear tokens:" << reply->errorString() << err;
+            qWarning() << "[AuthManager] Error al canjear tokens:" << reply->errorString();
             emit authStatusChanged();
             emit authFailed(reply->errorString());
             return;
@@ -278,7 +285,7 @@ void AuthManager::fetchUserProfile() {
     QNetworkRequest req(QUrl(QString::fromLatin1(kGraphMeEndpoint)));
     req.setRawHeader("Authorization", "Bearer " + m_accessToken.toUtf8());
 
-    QNetworkReply *reply = m_nam->get(req);
+    QNetworkReply *reply = networkAccessManager()->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
@@ -319,7 +326,7 @@ void AuthManager::refreshAccessToken(std::function<void(bool success)> callback)
     body.addQueryItem("grant_type", "refresh_token");
     body.addQueryItem("refresh_token", m_refreshToken);
 
-    QNetworkReply *reply = m_nam->post(req, body.toString(QUrl::FullyEncoded).toUtf8());
+    QNetworkReply *reply = networkAccessManager()->post(req, body.toString(QUrl::FullyEncoded).toUtf8());
     connect(reply, &QNetworkReply::finished, this, [this, reply, callback]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
@@ -377,8 +384,12 @@ void AuthManager::logout() {
     stopLocalServer();
     m_isAuthenticated = false;
     m_isAuthenticating = false;
+    m_accessToken.fill(QChar(u'\0'));
     m_accessToken.clear();
+    m_refreshToken.fill(QChar(u'\0'));
     m_refreshToken.clear();
+    m_codeVerifier.fill(QChar(u'\0'));
+    m_codeVerifier.clear();
     m_tokenExpiry = QDateTime();
     m_userEmail.clear();
     m_userName.clear();

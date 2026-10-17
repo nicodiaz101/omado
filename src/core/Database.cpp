@@ -31,6 +31,8 @@ bool Database::initialize() {
     executeSql("PRAGMA journal_mode=WAL;");
     executeSql("PRAGMA foreign_keys=ON;");
     executeSql("PRAGMA busy_timeout=5000;");
+    executeSql("PRAGMA cache_size=-512;");
+    executeSql("PRAGMA temp_store=MEMORY;");
     
     // 4. Migraciones
     return applyMigrations();
@@ -200,6 +202,28 @@ bool Database::applyMigrations() {
         } else {
             m_db.rollback();
             qWarning() << "[Database] Falló la migración v3";
+            return false;
+        }
+    }
+
+    if (currentVersion < 4) {
+        qDebug() << "[Database] Aplicando migración v4 (índices para optimización de queries)...";
+        m_db.transaction();
+
+        bool ok = executeSql("CREATE INDEX IF NOT EXISTS idx_tasks_list_completed ON tasks(list_id, is_completed);")
+               && executeSql("CREATE INDEX IF NOT EXISTS idx_tasks_reminders ON tasks(reminder_at, is_completed, reminded);")
+               && executeSql("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);")
+               && executeSql("CREATE INDEX IF NOT EXISTS idx_tasks_remote_id ON tasks(remote_id);")
+               && executeSql("CREATE INDEX IF NOT EXISTS idx_task_steps_task_id ON task_steps(task_id);")
+               && executeSql("CREATE INDEX IF NOT EXISTS idx_task_lists_remote_id ON task_lists(remote_id);");
+
+        if (ok) {
+            executeSql("INSERT INTO schema_version (version, applied_at) VALUES (4, datetime('now'))");
+            m_db.commit();
+            currentVersion = 4;
+        } else {
+            m_db.rollback();
+            qWarning() << "[Database] Falló la migración v4";
             return false;
         }
     }

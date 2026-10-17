@@ -7,7 +7,17 @@
 #include <QDebug>
 
 GraphClient::GraphClient(AuthManager *auth, QObject *parent)
-    : QObject(parent), m_auth(auth), m_nam(new QNetworkAccessManager(this)) {}
+    : QObject(parent), m_auth(auth), m_nam(nullptr) {}
+
+QNetworkAccessManager *GraphClient::networkAccessManager() {
+    if (m_auth) {
+        return m_auth->networkAccessManager();
+    }
+    if (!m_nam) {
+        m_nam = new QNetworkAccessManager(this);
+    }
+    return m_nam;
+}
 
 void GraphClient::sendAuthorizedRequest(const QString &method, const QString &endpoint, const QByteArray &data,
                                         std::function<void(bool success, int statusCode, const QByteArray &response, const QString &error)> callback) {
@@ -29,15 +39,16 @@ void GraphClient::sendAuthorizedRequest(const QString &method, const QString &en
         req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         req.setRawHeader("Prefer", "outlook.timezone=\"UTC\"");
 
+        QNetworkAccessManager *nam = networkAccessManager();
         QNetworkReply *reply = nullptr;
         if (method == "GET") {
-            reply = m_nam->get(req);
+            reply = nam->get(req);
         } else if (method == "POST") {
-            reply = m_nam->post(req, data);
+            reply = nam->post(req, data);
         } else if (method == "PATCH") {
-            reply = m_nam->sendCustomRequest(req, "PATCH", data);
+            reply = nam->sendCustomRequest(req, "PATCH", data);
         } else if (method == "DELETE") {
-            reply = m_nam->deleteResource(req);
+            reply = nam->deleteResource(req);
         } else {
             if (callback) callback(false, 0, QByteArray(), "Método no soportado");
             return;
@@ -50,7 +61,7 @@ void GraphClient::sendAuthorizedRequest(const QString &method, const QString &en
 
             if (reply->error() != QNetworkReply::NoError && statusCode >= 400) {
                 QString errStr = reply->errorString();
-                qWarning() << "[GraphClient] Error HTTP" << statusCode << ":" << errStr << respData;
+                qWarning() << "[GraphClient] Error HTTP" << statusCode << ":" << errStr;
                 emit networkError(errStr);
                 if (callback) callback(false, statusCode, respData, errStr);
             } else {
