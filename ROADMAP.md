@@ -196,7 +196,7 @@
 - 🔲 `pkgbuild/PKGBUILD` con dependencias: `qt6-base`, `qtkeychain-qt6`.
 - 🔲 Instalar `.desktop` para autostart del daemon.
 - 🔲 `provides=('omado')`, `conflicts=('omado-git')`.
-- ✅ `install.sh` y `PKGBUILD` configurados para versión 1.2.
+- ✅ `install.sh` y `PKGBUILD` configurados para versión 1.3.
 
 ---
 
@@ -209,7 +209,7 @@
 
 ---
 
-## Hito 6 — v1.3: Personalización de Listas de Tareas (Iconos/Emojis y Renombrado)
+## Hito 6 — v1.3: Personalización de Listas de Tareas, Ordenamiento y Auditoría QA
 - ✅ Unificación del icono por defecto de lista y el emoji/icono personalizado en un solo slot visual en el panel lateral.
 - ✅ Menú contextual nativo de Omarchy (`ListContextMenu.qml`) al hacer click derecho sobre cualquier lista personalizada (Cambiar icono, Renombrar lista, Eliminar lista).
 - ✅ Selector visual de iconos/emojis (`ListIconPickerPopup.qml`) con estilo Omarchy y categorías compatibles con Microsoft To Do (General, Trabajo, Hogar, Ocio, Símbolos).
@@ -217,6 +217,7 @@
 - ✅ Renombrado de listas directamente en línea o vía diálogo con preservación de icono y sincronización bidireccional vía Microsoft Graph API.
 - ✅ Integración y visualización del icono de la lista activa en el encabezado principal de `TaskView.qml`.
 - ✅ Botón conmutador minimalista para ordenar tareas cronológicamente por fecha de vencimiento y recordatorio más próximo con persistencia en `QSettings`.
+- ✅ Auditoría integral de QA & C++/Qt6: mitigación de fugas y bloqueos en SQLite (`QThreadPool` dedicado, `QThreadStorage`, RAII, `PRAGMA cache_size=-512`), inicialización lazy y compartida de `QNetworkAccessManager`, sanitización XSS, limpieza de tokens en memoria en logout, índices v4 en SQLite y eliminación de consulta $N+1$ de subtareas.
 - ✅ Tests unitarios completos para parseo, roles del modelo, ordenamiento cronológico, renombrado y actualización de iconos en `tst_TaskListModel.cpp` y `tst_TaskModel.cpp`.
 
 ---
@@ -230,4 +231,4 @@
 | v1.0.0 | 3 (sync MS To Do opcional) | ✅ |
 | v1.1.0 | 4 (plugin de panel Quickshell) | ✅ |
 | v1.2.0 | 5 (parser NLP, filtro completadas, recordatorios en My Day) | ✅ |
-| v1.3.0 | 6 (personalización de listas, iconos/emojis, menú contextual) | ✅ |
+| v1.3.0 | 6 (personalización de listas, ordenamiento por vencimiento, QA & optimización RAM) | ✅ |
