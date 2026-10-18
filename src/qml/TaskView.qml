@@ -15,15 +15,17 @@ Item {
         if (TaskModel.currentListId === "special-schedule") return qsTr("Schedule")
         if (TaskModel.currentListId === "special-tasks") return qsTr("Tasks")
         
-        // Find custom list display name
-        for (var i = 0; i < TaskListModel.rowCount(); ++i) {
-            var idx = TaskListModel.index(i, 0)
-            var id = TaskListModel.data(idx, 257) // IdRole
-            if (id === TaskModel.currentListId) {
-                return TaskListModel.data(idx, 258) // DisplayNameRole
-            }
-        }
+        var name = TaskListModel.getListName(TaskModel.currentListId)
+        if (name && name !== "") return name
         return qsTr("Tasks")
+    }
+
+    function getListIcon() {
+        if (TaskModel.currentListId === "special-myday") return ""
+        if (TaskModel.currentListId === "special-schedule") return ""
+        if (TaskModel.currentListId === "special-tasks") return ""
+        
+        return TaskListModel.getListIcon(TaskModel.currentListId)
     }
 
     RowLayout {
@@ -48,6 +50,14 @@ Item {
                         anchors.fill: parent
                         anchors.leftMargin: 20
                         anchors.rightMargin: 20
+                        spacing: 8
+
+                        Text {
+                            visible: root.getListIcon() !== ""
+                            text: root.getListIcon()
+                            font.pixelSize: 20
+                            Layout.alignment: Qt.AlignVCenter
+                        }
 
                         Text {
                             text: root.getListTitle()
@@ -55,9 +65,62 @@ Item {
                             font.family: "iA Writer Mono"
                             font.pixelSize: 18
                             font.bold: true
+                            Layout.alignment: Qt.AlignVCenter
                         }
 
                         Item { Layout.fillWidth: true }
+
+                        // Sort Button: Order by due date / reminder
+                        Rectangle {
+                            id: sortToggleBtn
+                            height: 22
+                            width: 22
+                            radius: 11
+                            color: TaskModel.sortByDueDate
+                                   ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+                                   : (mouseAreaSort.containsMouse ? Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.08) : Qt.rgba(Theme.border.r, Theme.border.g, Theme.border.b, 0.25))
+                            border.color: TaskModel.sortByDueDate ? Theme.accent : (mouseAreaSort.containsMouse ? Theme.border : "transparent")
+                            border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                name: "arrow-down-up"
+                                size: 13
+                                color: TaskModel.sortByDueDate ? Theme.accent : Theme.foreground
+                                opacity: TaskModel.sortByDueDate ? 1.0 : (mouseAreaSort.containsMouse ? 0.9 : 0.6)
+                            }
+
+                            MouseArea {
+                                id: mouseAreaSort
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: TaskModel.sortByDueDate = !TaskModel.sortByDueDate
+                            }
+
+                            ToolTip {
+                                id: sortToolTip
+                                visible: mouseAreaSort.containsMouse
+                                delay: 300
+                                text: TaskModel.sortByDueDate ? qsTr("Restore default order") : qsTr("Sort by due date and reminder")
+
+                                contentItem: Text {
+                                    text: sortToolTip.text
+                                    font.family: "iA Writer Mono"
+                                    font.pixelSize: 11
+                                    color: Theme.foreground
+                                }
+                                background: Rectangle {
+                                    color: Theme.surface
+                                    border.color: Theme.border
+                                    border.width: 1
+                                    radius: 4
+                                }
+                            }
+                        }
 
                         // Filter Button: Hide / Show completed tasks
                         Rectangle {

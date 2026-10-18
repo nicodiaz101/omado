@@ -123,6 +123,89 @@ private slots:
         QCOMPARE(map["dueDate"].toString(), QDate::currentDate().addDays(1).toString(Qt::ISODate));
         QCOMPARE(map["reminderTime"].toString(), QStringLiteral("10:00"));
     }
+
+    void testSortByDueDate() {
+        TaskList list = m_repo->createList("Lista Sort Test").result();
+
+        Task tNoDate;
+        tNoDate.listId = list.id;
+        tNoDate.title = "Sin fecha";
+        tNoDate.isCompleted = false;
+        m_repo->createTask(tNoDate).result();
+
+        Task tTomorrow;
+        tTomorrow.listId = list.id;
+        tTomorrow.title = "Mañana";
+        tTomorrow.dueDate = QDate::currentDate().addDays(1);
+        tTomorrow.isCompleted = false;
+        m_repo->createTask(tTomorrow).result();
+
+        Task tTodayAfternoon;
+        tTodayAfternoon.listId = list.id;
+        tTodayAfternoon.title = "Hoy tarde";
+        tTodayAfternoon.dueDate = QDate::currentDate();
+        tTodayAfternoon.reminderAt = QDateTime(QDate::currentDate(), QTime(17, 0));
+        tTodayAfternoon.isCompleted = false;
+        m_repo->createTask(tTodayAfternoon).result();
+
+        Task tTodayMorning;
+        tTodayMorning.listId = list.id;
+        tTodayMorning.title = "Hoy temprano";
+        tTodayMorning.dueDate = QDate::currentDate();
+        tTodayMorning.reminderAt = QDateTime(QDate::currentDate(), QTime(9, 0));
+        tTodayMorning.isCompleted = false;
+        m_repo->createTask(tTodayMorning).result();
+
+        Task tCompleted;
+        tCompleted.listId = list.id;
+        tCompleted.title = "Completada hoy";
+        tCompleted.dueDate = QDate::currentDate();
+        tCompleted.reminderAt = QDateTime(QDate::currentDate(), QTime(8, 0));
+        tCompleted.isCompleted = true;
+        m_repo->createTask(tCompleted).result();
+
+        TaskModel model(m_repo);
+        model.setHideCompleted(false);
+        model.setSortByDueDate(false);
+
+        QSignalSpy sortSpy(&model, &TaskModel::sortByDueDateChanged);
+
+        model.setCurrentListId(list.id);
+        QTRY_COMPARE(model.rowCount(), 5);
+
+        // Activar orden por fecha de vencimiento y recordatorio
+        model.setSortByDueDate(true);
+        QCOMPARE(sortSpy.count(), 1);
+        QCOMPARE(model.sortByDueDate(), true);
+        QCOMPARE(model.rowCount(), 5);
+
+        // Verificar el orden correcto:
+        // 0: Hoy temprano (09:00 hoy)
+        // 1: Hoy tarde (17:00 hoy)
+        // 2: Mañana
+        // 3: Sin fecha
+        // 4: Completada hoy (las completadas van al final)
+        QCOMPARE(model.data(model.index(0, 0), TaskModel::TitleRole).toString(), QStringLiteral("Hoy temprano"));
+        QCOMPARE(model.data(model.index(1, 0), TaskModel::TitleRole).toString(), QStringLiteral("Hoy tarde"));
+        QCOMPARE(model.data(model.index(2, 0), TaskModel::TitleRole).toString(), QStringLiteral("Mañana"));
+        QCOMPARE(model.data(model.index(3, 0), TaskModel::TitleRole).toString(), QStringLiteral("Sin fecha"));
+        QCOMPARE(model.data(model.index(4, 0), TaskModel::TitleRole).toString(), QStringLiteral("Completada hoy"));
+
+        // Agregar una tarea con vencimiento intermedio (12:00 hoy)
+        QString todayStr = QDate::currentDate().toString(Qt::ISODate);
+        model.addTask("Almuerzo hoy a las 12:00", todayStr, QString("%1 12:00").arg(todayStr));
+        QCOMPARE(model.rowCount(), 6);
+        // Debe ubicarse en la posición 1 (entre 09:00 y 17:00)
+        QCOMPARE(model.data(model.index(1, 0), TaskModel::TitleRole).toString(), QStringLiteral("Almuerzo hoy a las 12:00"));
+
+        // Desactivar orden por vencimiento y volver al default
+        model.setSortByDueDate(false);
+        QCOMPARE(sortSpy.count(), 2);
+        QCOMPARE(model.sortByDueDate(), false);
+
+        // Limpieza
+        m_repo->deleteList(list.id).result();
+    }
 };
 
 QTEST_MAIN(tst_TaskModel)

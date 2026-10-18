@@ -8,6 +8,10 @@
 #include <QTimer>
 
 ThemeReader::ThemeReader(QObject *parent) : QObject(parent) {
+    m_debounceTimer.setSingleShot(true);
+    m_debounceTimer.setInterval(50);
+    connect(&m_debounceTimer, &QTimer::timeout, this, &ThemeReader::loadTheme);
+
     QString themeDir = QDir::homePath() + "/.local/state/omarchy/current/theme";
     m_themePath = themeDir + "/colors.toml";
     
@@ -18,10 +22,10 @@ ThemeReader::ThemeReader(QObject *parent) : QObject(parent) {
     if (QFile::exists(m_themePath)) m_watcher.addPath(m_themePath);
     
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &) {
-        QTimer::singleShot(50, this, &ThemeReader::loadTheme);
+        m_debounceTimer.start();
     });
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
-        QTimer::singleShot(50, this, &ThemeReader::loadTheme);
+        m_debounceTimer.start();
     });
 }
 
@@ -29,11 +33,15 @@ ThemeReader::ThemeReader(const QString &themePath, QObject *parent)
     : QObject(parent)
     , m_themePath(themePath)
 {
+    m_debounceTimer.setSingleShot(true);
+    m_debounceTimer.setInterval(50);
+    connect(&m_debounceTimer, &QTimer::timeout, this, &ThemeReader::loadTheme);
+
     loadTheme();
 
     if (QFile::exists(m_themePath)) m_watcher.addPath(m_themePath);
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &) {
-        QTimer::singleShot(50, this, &ThemeReader::loadTheme);
+        m_debounceTimer.start();
     });
 }
 
@@ -64,7 +72,7 @@ void ThemeReader::loadTheme() {
             continue;
         }
         
-        QRegularExpression re(R"(^(\w+)\s*=\s*['"]?(#[0-9a-fA-F]{6,8})['"]?)");
+        static const QRegularExpression re(QStringLiteral(R"(^(\w+)\s*=\s*['"]?(#[0-9a-fA-F]{6,8})['"]?)"));
         QRegularExpressionMatch match = re.match(line);
         if (match.hasMatch()) {
             QString key = match.captured(1);

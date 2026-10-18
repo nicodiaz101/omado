@@ -12,6 +12,8 @@ Rectangle {
     width: 240
     color: Theme.surface
 
+    property string inlineRenameId: ""
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -97,6 +99,7 @@ Rectangle {
             boundsBehavior: Flickable.StopAtBounds
 
             delegate: Item {
+                id: listDelegateItem
                 // Filter out special lists so they only appear in Section 1
                 visible: !model.isSpecial && model.id !== "default-tasks"
                 width: userListsView.width
@@ -117,8 +120,23 @@ Rectangle {
                         id: mouseAreaList
                         anchors.fill: parent
                         hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: TaskModel.currentListId = model.id
+
+                        onClicked: (mouse) => {
+                            if (mouse.button === Qt.RightButton) {
+                                var globalP = mapToItem(Overlay.overlay, mouse.x, mouse.y)
+                                listContextMenu.openAt(model.id, model.name !== "" ? model.name : model.displayName, model.icon, globalP)
+                            } else {
+                                TaskModel.currentListId = model.id
+                            }
+                        }
+
+                        onDoubleClicked: (mouse) => {
+                            if (mouse.button === Qt.LeftButton) {
+                                root.inlineRenameId = model.id
+                            }
+                        }
                     }
 
                     RowLayout {
@@ -127,19 +145,93 @@ Rectangle {
                         anchors.rightMargin: 12
                         spacing: 12
 
-                        AppIcon {
-                            name: "list"
-                            size: 15
-                            color: TaskModel.currentListId === model.id ? Theme.accent : Theme.foreground
+                        // UNIFIED ICON: Either emoji or default 3-stripes list icon
+                        Item {
+                            width: 16
+                            height: 16
+                            Layout.alignment: Qt.AlignVCenter
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: model.icon !== ""
+                                text: model.icon
+                                font.pixelSize: 14
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                visible: model.icon === ""
+                                name: "list"
+                                size: 15
+                                color: TaskModel.currentListId === model.id ? Theme.accent : Theme.foreground
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    listIconPickerPopup.openForList(model.id, model.name !== "" ? model.name : model.displayName, model.icon)
+                                }
+                            }
                         }
 
+                        // Display name: clean name without duplicated emoji
                         Text {
                             Layout.fillWidth: true
-                            text: model.displayName
+                            visible: root.inlineRenameId !== model.id
+                            text: model.name !== "" ? model.name : (model.icon !== "" ? model.icon : model.displayName)
                             color: TaskModel.currentListId === model.id ? Theme.accent : Theme.foreground
                             font.family: "iA Writer Mono"
                             font.pixelSize: 13
                             elide: Text.ElideRight
+                        }
+
+                        // Inline rename input when active
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 24
+                            visible: root.inlineRenameId === model.id
+                            color: Theme.surface
+                            border.color: Theme.accent
+                            border.width: 1
+                            radius: 4
+
+                            TextInput {
+                                id: inlineRenameInput
+                                anchors.fill: parent
+                                anchors.leftMargin: 6
+                                anchors.rightMargin: 6
+                                verticalAlignment: TextInput.AlignVCenter
+                                text: model.name !== "" ? model.name : model.displayName
+                                color: Theme.foreground
+                                font.family: "iA Writer Mono"
+                                font.pixelSize: 12
+                                selectByMouse: true
+
+                                onAccepted: {
+                                    if (text.trim().length > 0) {
+                                        TaskListModel.renameList(model.id, text.trim())
+                                    }
+                                    root.inlineRenameId = ""
+                                }
+
+                                Keys.onEscapePressed: {
+                                    root.inlineRenameId = ""
+                                }
+
+                                Connections {
+                                    target: root
+                                    function onInlineRenameIdChanged() {
+                                        if (root.inlineRenameId === model.id) {
+                                            inlineRenameInput.text = model.name !== "" ? model.name : model.displayName
+                                            inlineRenameInput.forceActiveFocus()
+                                            inlineRenameInput.selectAll()
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // Delete list button (hover)
@@ -147,7 +239,7 @@ Rectangle {
                             z: 2
                             width: 24
                             height: 24
-                            visible: mouseAreaList.containsMouse || mouseAreaTrash.containsMouse
+                            visible: (mouseAreaList.containsMouse || mouseAreaTrash.containsMouse) && root.inlineRenameId !== model.id
 
                             AppIcon {
                                 anchors.centerIn: parent
@@ -453,6 +545,20 @@ Rectangle {
                 }
             }
         }
+    }
+
+    ListContextMenu {
+        id: listContextMenu
+        onRenameRequested: (listId, currentName) => {
+            root.inlineRenameId = listId
+        }
+        onChangeIconRequested: (listId, currentName, currentIcon) => {
+            listIconPickerPopup.openForList(listId, currentName, currentIcon)
+        }
+    }
+
+    ListIconPickerPopup {
+        id: listIconPickerPopup
     }
 
     Component.onCompleted: {

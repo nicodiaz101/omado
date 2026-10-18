@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(omado VERSION 1.2.0 LANGUAGES CXX)
+project(omado VERSION 1.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -51,10 +51,14 @@ qt_add_qml_module(omado
         src/qml/components/TimePickerPopup.qml
         src/qml/components/DraftStepsPopup.qml
         src/qml/components/RecurrencePopup.qml
+        src/qml/components/ListContextMenu.qml
+        src/qml/components/ListIconPickerPopup.qml
+        src/qml/components/ListRenameDialog.qml
     RESOURCES
         fonts/iAWriterMono-Regular.ttf
         fonts/iAWriterMono-Bold.ttf
         icons/alarm.svg
+        icons/arrow-down-up.svg
         icons/calendar.svg
         icons/close.svg
         icons/eye.svg

@@ -6,24 +6,60 @@
 #include <QDebug>
 #include <QThread>
 #include <QStandardPaths>
+#include <QThreadStorage>
+#include <QHash>
 
-LocalRepository::LocalRepository(QObject *parent) : QObject(parent) {}
+struct DatabaseConnectionHolder {
+    QString connectionName;
+    DatabaseConnectionHolder() {
+        connectionName = QString("omado_repo_%1").arg((quintptr)QThread::currentThreadId());
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", connectionName);
+        db.setDatabaseName(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/omado.db");
+        if (!db.open()) {
+            qWarning() << "[LocalRepository] Failed to open thread DB:" << db.lastError().text();
+        } else {
+            QSqlQuery q(db);
+            q.exec("PRAGMA busy_timeout = 5000;");
+            q.exec("PRAGMA foreign_keys = ON;");
+            q.exec("PRAGMA cache_size = -512;");
+            q.exec("PRAGMA temp_store = MEMORY;");
+        }
+    }
+    ~DatabaseConnectionHolder() {
+        if (!connectionName.isEmpty() && QSqlDatabase::contains(connectionName)) {
+            {
+                QSqlDatabase db = QSqlDatabase::database(connectionName, false);
+                if (db.isOpen()) {
+                    db.close();
+                }
+            }
+            QSqlDatabase::removeDatabase(connectionName);
+        }
+    }
+};
+
+static QThreadStorage<DatabaseConnectionHolder> s_dbStorage;
 
 static QSqlDatabase getThreadDb() {
-    QString connectionName = QString::number((quintptr)QThread::currentThreadId());
-    if (QSqlDatabase::contains(connectionName)) {
-        return QSqlDatabase::database(connectionName);
+    return QSqlDatabase::database(s_dbStorage.localData().connectionName);
+}
+
+LocalRepository::LocalRepository(QObject *parent) : QObject(parent) {
+    m_threadPool.setMaxThreadCount(1);
+    m_threadPool.setExpiryTimeout(-1);
+}
+
+LocalRepository::~LocalRepository() {
+    m_threadPool.waitForDone();
+}
+
+static QDateTime parseIsoDateTime(const QString &str) {
+    if (str.isEmpty()) return QDateTime();
+    QDateTime dt = QDateTime::fromString(str, Qt::ISODateWithMs);
+    if (!dt.isValid()) {
+        dt = QDateTime::fromString(str, Qt::ISODate);
     }
-    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", connectionName);
-    db.setDatabaseName(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/omado.db");
-    if (!db.open()) {
-        qWarning() << "[LocalRepository] Failed to open thread DB:" << db.lastError().text();
-    } else {
-        QSqlQuery q(db);
-        q.exec("PRAGMA busy_timeout = 5000;");
-        q.exec("PRAGMA foreign_keys = ON;");
-    }
-    return db;
+    return dt;
 }
 
 static TaskList mapToTaskList(const QSqlQuery &q) {
@@ -33,6 +69,8 @@ static TaskList mapToTaskList(const QSqlQuery &q) {
     l.isSpecial = q.value("is_special").toBool();
     l.sortOrder = q.value("sort_order").toInt();
     l.remoteId = q.value("remote_id").toString();
+    QString syncedStr = q.value("synced_at").toString();
+    if (!syncedStr.isEmpty()) l.syncedAt = parseIsoDateTime(syncedStr);
     return l;
 }
 
@@ -55,16 +93,45 @@ static QList<TaskStep> loadStepsForTask(const QString &taskId, QSqlDatabase &db)
     return steps;
 }
 
-static QDateTime parseIsoDateTime(const QString &str) {
-    if (str.isEmpty()) return QDateTime();
-    QDateTime dt = QDateTime::fromString(str, Qt::ISODateWithMs);
-    if (!dt.isValid()) {
-        dt = QDateTime::fromString(str, Qt::ISODate);
+static void populateStepsForTasks(QList<Task> &tasks, QSqlDatabase &db) {
+    if (tasks.isEmpty()) return;
+    if (tasks.size() == 1) {
+        tasks[0].steps = loadStepsForTask(tasks[0].id, db);
+        return;
     }
-    return dt;
+
+    QStringList placeholders;
+    placeholders.reserve(tasks.size());
+    for (int i = 0; i < tasks.size(); ++i) {
+        placeholders.append("?");
+    }
+
+    QSqlQuery q(db);
+    q.prepare(QString("SELECT id, task_id, title, is_completed, sort_order FROM task_steps WHERE task_id IN (%1) ORDER BY sort_order ASC").arg(placeholders.join(',')));
+    for (const auto &t : tasks) {
+        q.addBindValue(t.id);
+    }
+
+    if (q.exec()) {
+        QHash<QString, QList<TaskStep>> stepsMap;
+        while (q.next()) {
+            TaskStep s;
+            s.id = q.value("id").toString();
+            s.taskId = q.value("task_id").toString();
+            s.title = q.value("title").toString();
+            s.isCompleted = q.value("is_completed").toBool();
+            s.sortOrder = q.value("sort_order").toInt();
+            stepsMap[s.taskId].append(s);
+        }
+        for (auto &t : tasks) {
+            t.steps = stepsMap.value(t.id);
+        }
+    } else {
+        qWarning() << "[LocalRepository] populateStepsForTasks error:" << q.lastError().text();
+    }
 }
 
-static Task mapToTask(const QSqlQuery &q, QSqlDatabase &db) {
+static Task mapToTask(const QSqlQuery &q, QSqlDatabase &db, bool loadSteps = true) {
     Task t;
     t.id = q.value("id").toString();
     t.listId = q.value("list_id").toString();
@@ -99,29 +166,32 @@ static Task mapToTask(const QSqlQuery &q, QSqlDatabase &db) {
     QString syncedStr = q.value("synced_at").toString();
     if (!syncedStr.isEmpty()) t.syncedAt = parseIsoDateTime(syncedStr);
     t.remoteId = q.value("remote_id").toString();
-    t.steps = loadStepsForTask(t.id, db);
+    if (loadSteps) {
+        t.steps = loadStepsForTask(t.id, db);
+    }
     return t;
 }
 
 QFuture<QList<TaskList>> LocalRepository::fetchLists() {
-    return QtConcurrent::run([]() {
+    return QtConcurrent::run(&m_threadPool, []() {
         QList<TaskList> lists;
         QSqlDatabase db = getThreadDb();
-        QSqlQuery q("SELECT id, display_name, is_special, sort_order, remote_id FROM task_lists ORDER BY sort_order ASC, created_at ASC", db);
+        QSqlQuery q("SELECT id, display_name, is_special, sort_order, remote_id, synced_at FROM task_lists ORDER BY sort_order ASC, created_at ASC", db);
         while (q.next()) lists.append(mapToTaskList(q));
         return lists;
     });
 }
 
 QFuture<QList<Task>> LocalRepository::fetchTasks(const QString &listId) {
-    return QtConcurrent::run([listId]() {
+    return QtConcurrent::run(&m_threadPool, [listId]() {
         QList<Task> tasks;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("SELECT * FROM tasks WHERE list_id = :list_id ORDER BY is_completed ASC, sort_order DESC, created_at DESC");
         q.bindValue(":list_id", listId);
         if (q.exec()) {
-            while (q.next()) tasks.append(mapToTask(q, db));
+            while (q.next()) tasks.append(mapToTask(q, db, false));
+            populateStepsForTasks(tasks, db);
         } else {
             qWarning() << "[LocalRepository] fetchTasks error:" << q.lastError().text();
         }
@@ -130,14 +200,15 @@ QFuture<QList<Task>> LocalRepository::fetchTasks(const QString &listId) {
 }
 
 QFuture<QList<Task>> LocalRepository::fetchMyDayTasks() {
-    return QtConcurrent::run([]() {
+    return QtConcurrent::run(&m_threadPool, []() {
         QList<Task> tasks;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("SELECT * FROM tasks WHERE is_my_day = 1 OR due_date = :today OR substr(due_date, 1, 10) = :today OR substr(reminder_at, 1, 10) = :today ORDER BY is_completed ASC, sort_order DESC, created_at DESC");
         q.bindValue(":today", QDate::currentDate().toString(Qt::ISODate));
         if (q.exec()) {
-            while (q.next()) tasks.append(mapToTask(q, db));
+            while (q.next()) tasks.append(mapToTask(q, db, false));
+            populateStepsForTasks(tasks, db);
         } else {
             qWarning() << "[LocalRepository] fetchMyDayTasks error:" << q.lastError().text();
         }
@@ -146,27 +217,29 @@ QFuture<QList<Task>> LocalRepository::fetchMyDayTasks() {
 }
 
 QFuture<QList<Task>> LocalRepository::fetchScheduleTasks() {
-    return QtConcurrent::run([]() {
+    return QtConcurrent::run(&m_threadPool, []() {
         QList<Task> tasks;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q("SELECT * FROM tasks WHERE due_date IS NOT NULL AND due_date != '' ORDER BY due_date ASC, is_completed ASC, sort_order DESC", db);
-        while (q.next()) tasks.append(mapToTask(q, db));
+        while (q.next()) tasks.append(mapToTask(q, db, false));
+        populateStepsForTasks(tasks, db);
         return tasks;
     });
 }
 
 QFuture<QList<Task>> LocalRepository::fetchAllTasks() {
-    return QtConcurrent::run([]() {
+    return QtConcurrent::run(&m_threadPool, []() {
         QList<Task> tasks;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q("SELECT * FROM tasks ORDER BY is_completed ASC, sort_order DESC, created_at DESC", db);
-        while (q.next()) tasks.append(mapToTask(q, db));
+        while (q.next()) tasks.append(mapToTask(q, db, false));
+        populateStepsForTasks(tasks, db);
         return tasks;
     });
 }
 
 QFuture<TaskList> LocalRepository::createList(const QString &name) {
-    return QtConcurrent::run([name]() {
+    return QtConcurrent::run(&m_threadPool, [name]() {
         TaskList l;
         l.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         l.displayName = name;
@@ -186,7 +259,7 @@ QFuture<TaskList> LocalRepository::createList(const QString &name) {
 }
 
 QFuture<Task> LocalRepository::createTask(const Task &task) {
-    return QtConcurrent::run([task]() {
+    return QtConcurrent::run(&m_threadPool, [task]() {
         Task t = task;
         if (t.id.isEmpty()) t.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         if (!t.createdAt.isValid()) t.createdAt = QDateTime::currentDateTime();
@@ -245,7 +318,7 @@ QFuture<Task> LocalRepository::createTask(const Task &task) {
 }
 
 QFuture<bool> LocalRepository::updateTask(const Task &task) {
-    return QtConcurrent::run([task]() {
+    return QtConcurrent::run(&m_threadPool, [task]() {
         QSqlDatabase db = getThreadDb();
         QDateTime now = QDateTime::currentDateTime();
         QSqlQuery q(db);
@@ -288,7 +361,7 @@ QFuture<bool> LocalRepository::updateTask(const Task &task) {
 }
 
 QFuture<Task> LocalRepository::fetchTaskById(const QString &id) {
-    return QtConcurrent::run([id]() {
+    return QtConcurrent::run(&m_threadPool, [id]() {
         Task t;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
@@ -302,7 +375,7 @@ QFuture<Task> LocalRepository::fetchTaskById(const QString &id) {
 }
 
 QFuture<bool> LocalRepository::toggleTask(const QString &taskId, bool completed) {
-    return QtConcurrent::run([taskId, completed]() {
+    return QtConcurrent::run(&m_threadPool, [taskId, completed]() {
         QSqlDatabase db = getThreadDb();
         QDateTime now = QDateTime::currentDateTime();
         QSqlQuery q(db);
@@ -320,7 +393,7 @@ QFuture<bool> LocalRepository::toggleTask(const QString &taskId, bool completed)
 }
 
 QFuture<bool> LocalRepository::markReminded(const QString &taskId, bool reminded) {
-    return QtConcurrent::run([taskId, reminded]() {
+    return QtConcurrent::run(&m_threadPool, [taskId, reminded]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("UPDATE tasks SET reminded = :reminded WHERE id = :id");
@@ -335,10 +408,10 @@ QFuture<bool> LocalRepository::markReminded(const QString &taskId, bool reminded
 }
 
 QFuture<bool> LocalRepository::updateList(const TaskList &list) {
-    return QtConcurrent::run([list]() {
+    return QtConcurrent::run(&m_threadPool, [list]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
-        q.prepare("UPDATE task_lists SET display_name = :name, sort_order = :sort WHERE id = :id");
+        q.prepare("UPDATE task_lists SET display_name = :name, sort_order = :sort, synced_at = NULL WHERE id = :id");
         q.bindValue(":id", list.id);
         q.bindValue(":name", list.displayName);
         q.bindValue(":sort", list.sortOrder);
@@ -347,7 +420,7 @@ QFuture<bool> LocalRepository::updateList(const TaskList &list) {
 }
 
 QFuture<bool> LocalRepository::deleteList(const QString &id) {
-    return QtConcurrent::run([id]() {
+    return QtConcurrent::run(&m_threadPool, [id]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("DELETE FROM task_lists WHERE id = :id AND is_special = 0");
@@ -357,7 +430,7 @@ QFuture<bool> LocalRepository::deleteList(const QString &id) {
 }
 
 QFuture<bool> LocalRepository::deleteTask(const QString &id, bool recordForRemoteSync) {
-    return QtConcurrent::run([id, recordForRemoteSync]() {
+    return QtConcurrent::run(&m_threadPool, [id, recordForRemoteSync]() {
         QSqlDatabase db = getThreadDb();
         if (recordForRemoteSync) {
             QString remoteId;
@@ -396,7 +469,7 @@ QFuture<bool> LocalRepository::deleteTask(const QString &id, bool recordForRemot
 }
 
 QFuture<TaskStep> LocalRepository::addStep(const QString &taskId, const QString &title) {
-    return QtConcurrent::run([taskId, title]() {
+    return QtConcurrent::run(&m_threadPool, [taskId, title]() {
         TaskStep s;
         s.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         s.taskId = taskId;
@@ -417,7 +490,7 @@ QFuture<TaskStep> LocalRepository::addStep(const QString &taskId, const QString 
 }
 
 QFuture<bool> LocalRepository::updateStep(const TaskStep &step) {
-    return QtConcurrent::run([step]() {
+    return QtConcurrent::run(&m_threadPool, [step]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("UPDATE task_steps SET title = :title, is_completed = :is_completed WHERE id = :id");
@@ -429,7 +502,7 @@ QFuture<bool> LocalRepository::updateStep(const TaskStep &step) {
 }
 
 QFuture<bool> LocalRepository::deleteStep(const QString &stepId) {
-    return QtConcurrent::run([stepId]() {
+    return QtConcurrent::run(&m_threadPool, [stepId]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("DELETE FROM task_steps WHERE id = :id");
@@ -439,7 +512,7 @@ QFuture<bool> LocalRepository::deleteStep(const QString &stepId) {
 }
 
 QFuture<int> LocalRepository::getPendingCount(const QString &listId) {
-    return QtConcurrent::run([listId]() {
+    return QtConcurrent::run(&m_threadPool, [listId]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("SELECT COUNT(*) FROM tasks WHERE list_id = :list_id AND is_completed = 0");
@@ -450,7 +523,7 @@ QFuture<int> LocalRepository::getPendingCount(const QString &listId) {
 }
 
 QFuture<int> LocalRepository::getTotalPendingCount() {
-    return QtConcurrent::run([]() {
+    return QtConcurrent::run(&m_threadPool, []() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q("SELECT COUNT(*) FROM tasks WHERE is_completed = 0", db);
         if (q.next()) return q.value(0).toInt();
@@ -459,14 +532,14 @@ QFuture<int> LocalRepository::getTotalPendingCount() {
 }
 
 QFuture<QList<Task>> LocalRepository::getPendingReminders() {
-    return QtConcurrent::run([]() {
+    return QtConcurrent::run(&m_threadPool, []() {
         QList<Task> tasks;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("SELECT * FROM tasks WHERE reminder_at IS NOT NULL AND reminder_at != '' AND reminder_at <= :now AND is_completed = 0 AND reminded = 0");
         q.bindValue(":now", QDateTime::currentDateTime().toString(Qt::ISODate));
         if (q.exec()) {
-            while (q.next()) tasks.append(mapToTask(q, db));
+            while (q.next()) tasks.append(mapToTask(q, db, false));
         } else {
             qWarning() << "[LocalRepository] getPendingReminders error:" << q.lastError().text();
         }
@@ -486,7 +559,7 @@ QString LocalRepository::getListRemoteId(const QString &localListId) {
 }
 
 QFuture<bool> LocalRepository::updateListRemoteId(const QString &listId, const QString &remoteId) {
-    return QtConcurrent::run([listId, remoteId]() {
+    return QtConcurrent::run(&m_threadPool, [listId, remoteId]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("UPDATE task_lists SET remote_id = :remote_id, synced_at = :synced_at WHERE id = :id");
@@ -497,8 +570,19 @@ QFuture<bool> LocalRepository::updateListRemoteId(const QString &listId, const Q
     });
 }
 
+QFuture<bool> LocalRepository::markListSynced(const QString &listId) {
+    return QtConcurrent::run(&m_threadPool, [listId]() {
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        q.prepare("UPDATE task_lists SET synced_at = :now WHERE id = :id");
+        q.bindValue(":now", QDateTime::currentDateTime().toString(Qt::ISODate));
+        q.bindValue(":id", listId);
+        return q.exec();
+    });
+}
+
 QFuture<bool> LocalRepository::updateTaskRemoteId(const QString &taskId, const QString &remoteId) {
-    return QtConcurrent::run([taskId, remoteId]() {
+    return QtConcurrent::run(&m_threadPool, [taskId, remoteId]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         QString now = QDateTime::currentDateTime().toString(Qt::ISODateWithMs);
@@ -512,7 +596,7 @@ QFuture<bool> LocalRepository::updateTaskRemoteId(const QString &taskId, const Q
 }
 
 QFuture<bool> LocalRepository::markTaskSynced(const QString &taskId) {
-    return QtConcurrent::run([taskId]() {
+    return QtConcurrent::run(&m_threadPool, [taskId]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("UPDATE tasks SET synced_at = :synced WHERE id = :id");
@@ -523,7 +607,7 @@ QFuture<bool> LocalRepository::markTaskSynced(const QString &taskId) {
 }
 
 QFuture<QList<LocalRepository::DeletedTaskRecord>> LocalRepository::fetchDeletedTasks() {
-    return QtConcurrent::run([]() {
+    return QtConcurrent::run(&m_threadPool, []() {
         QList<LocalRepository::DeletedTaskRecord> list;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q("SELECT id, remote_id, list_remote_id FROM deleted_tasks", db);
@@ -535,7 +619,7 @@ QFuture<QList<LocalRepository::DeletedTaskRecord>> LocalRepository::fetchDeleted
 }
 
 QFuture<bool> LocalRepository::removeDeletedTaskRecord(const QString &id) {
-    return QtConcurrent::run([id]() {
+    return QtConcurrent::run(&m_threadPool, [id]() {
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
         q.prepare("DELETE FROM deleted_tasks WHERE id = :id");
@@ -545,11 +629,11 @@ QFuture<bool> LocalRepository::removeDeletedTaskRecord(const QString &id) {
 }
 
 QFuture<TaskList> LocalRepository::fetchListByRemoteId(const QString &remoteId) {
-    return QtConcurrent::run([remoteId]() {
+    return QtConcurrent::run(&m_threadPool, [remoteId]() {
         TaskList l;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
-        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
+        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id, synced_at FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
         q.bindValue(":remote_id", remoteId);
         if (q.exec() && q.next()) {
             l = mapToTaskList(q);
@@ -559,7 +643,7 @@ QFuture<TaskList> LocalRepository::fetchListByRemoteId(const QString &remoteId) 
 }
 
 QFuture<Task> LocalRepository::fetchTaskByRemoteId(const QString &remoteId) {
-    return QtConcurrent::run([remoteId]() {
+    return QtConcurrent::run(&m_threadPool, [remoteId]() {
         Task t;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
@@ -573,11 +657,11 @@ QFuture<Task> LocalRepository::fetchTaskByRemoteId(const QString &remoteId) {
 }
 
 QFuture<TaskList> LocalRepository::upsertRemoteList(const QString &remoteId, const QString &displayName) {
-    return QtConcurrent::run([remoteId, displayName]() {
+    return QtConcurrent::run(&m_threadPool, [remoteId, displayName]() {
         TaskList l;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);
-        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
+        q.prepare("SELECT id, display_name, is_special, sort_order, remote_id, synced_at FROM task_lists WHERE remote_id = :remote_id LIMIT 1");
         q.bindValue(":remote_id", remoteId);
         if (q.exec() && q.next()) {
             l = mapToTaskList(q);
@@ -614,7 +698,7 @@ QFuture<TaskList> LocalRepository::upsertRemoteList(const QString &remoteId, con
 }
 
 QFuture<Task> LocalRepository::upsertRemoteTask(const QString &localListId, const Task &task) {
-    return QtConcurrent::run([localListId, task]() {
+    return QtConcurrent::run(&m_threadPool, [localListId, task]() {
         Task t = task;
         QSqlDatabase db = getThreadDb();
         QSqlQuery q(db);

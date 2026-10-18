@@ -42,6 +42,7 @@ signals:
 private:
     void sendAuthorizedRequest(const QString &method, const QString &endpoint, const QByteArray &data,
                                std::function<void(bool success, int statusCode, const QByteArray &response, const QString &error)> callback);
+    QNetworkAccessManager *networkAccessManager();
 
     AuthManager            *m_auth = nullptr;
     QNetworkAccessManager  *m_nam = nullptr;

@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QColor>
 #include <QFileSystemWatcher>
+#include <QTimer>
 
 class ThemeReader : public QObject {
     Q_OBJECT
@@ -41,5 +42,6 @@ private:
     QColor m_error{"#f7768e"};
     
     QFileSystemWatcher m_watcher;
+    QTimer m_debounceTimer;
     QString m_themePath;
 };

@@ -25,7 +25,7 @@ SyncEngine::SyncEngine(AuthManager *auth, GraphClient *graph, LocalRepository *r
         bus.connect("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "TasksChanged",
                     this, SLOT(onRemoteTasksChanged(QString)));
         bus.connect("io.omarchy.OmaDo", "/io/omarchy/OmaDo", "io.omarchy.OmaDo", "TodayTasksChanged",
-                    this, SLOT(onRemoteTasksChanged(QString)));
+                    this, SLOT(onRemoteTodayTasksChanged()));
     }
 
     if (m_auth) {
@@ -67,6 +67,10 @@ void SyncEngine::onRemoteSyncFinished(bool success, const QString &message) {
 }
 
 void SyncEngine::onRemoteTasksChanged(const QString &) {
+    emit syncFinished(true, QStringLiteral("Actualizado por daemon"));
+}
+
+void SyncEngine::onRemoteTodayTasksChanged() {
     emit syncFinished(true, QStringLiteral("Actualizado por daemon"));
 }
 
@@ -187,6 +191,22 @@ void SyncEngine::performSync() {
                             localToRemoteMap[loc.id] = rId;
                             if (loc.remoteId != rId) {
                                 m_repo->updateListRemoteId(loc.id, rId);
+                            }
+                            if (loc.remoteId == rId && loc.displayName != name) {
+                                if (loc.syncedAt.isNull()) {
+                                    // Cambios locales pendientes -> subir a Microsoft To Do
+                                    m_graph->updateList(rId, loc.displayName, [this, locId = loc.id](bool okUpdate, const QString &) {
+                                        if (okUpdate) {
+                                            m_repo->markListSynced(locId);
+                                        }
+                                    });
+                                } else {
+                                    // Cambios remotos en MS To Do -> actualizar base local
+                                    TaskList updated = loc;
+                                    updated.displayName = name;
+                                    m_repo->updateList(updated);
+                                    m_repo->markListSynced(loc.id);
+                                }
                             }
                             found = true;
                             break;
