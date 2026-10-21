@@ -7,12 +7,12 @@
 
 ## PREÁMBULO
 
-OmaDo es un gestor de tareas nativo para Omarchy Quattro — local-first, sincronización con
-MS To Do opcional. Mismo ecosistema que OmaWrite y OmaCalc (omacom-io en GitHub).
+OmaDo es un gestor de tareas nativo para Omarchy (Quattro / 4.5+) — local-first, con sincronización
+con MS To Do / Samsung Reminders opcional. Mismo ecosistema y filosofía que OmaWrite, OmaCalc, Omacut y Hype.
 
 El agente DEBE leer `SPECS.md` completo antes de escribir cualquier línea de código.
 
-Filosofía: **cero peso, máxima integración nativa**. Cada decisión se evalúa contra este criterio.
+Filosofía: **cero peso, máxima integración nativa con Omarchy 4.5**. Cada decisión se evalúa contra este criterio.
 
 ---
 
@@ -23,13 +23,13 @@ Solo se permite lo que figura aquí. Todo lo demás está prohibido por defecto.
 ### 1.1 Lista Blanca
 
 **Qt 6 via `find_package(Qt6 ...)`:**
-- `Qt6::Core` — QObject, signals/slots, QTimer, QFile, QRegularExpression, QJsonDocument, QUuid, QDateTime
-- `Qt6::Gui` — QGuiApplication, QFontDatabase, QDesktopServices, QColor
+- `Qt6::Core` — QObject, signals/slots, QTimer, QFile, QFileSystemWatcher, QRegularExpression, QJsonDocument, QUuid, QDateTime, QTranslator, QLocale, QCommandLineParser
+- `Qt6::Gui` — QGuiApplication, QFontDatabase, QDesktopServices, QColor, QIcon
 - `Qt6::Quick` — QML engine, QQuickView, QAbstractListModel
 - `Qt6::QuickControls2` — Controls básicos en QML
 - `Qt6::Network` — QNetworkAccessManager, QTcpServer, QNetworkRequest
 - `Qt6::Sql` — QSqlDatabase, QSqlQuery, QSqlError (SQLite driver incluido en qt6-base)
-- `Qt6::DBus` — QDBusConnection, QDBusInterface, QDBusMessage
+- `Qt6::DBus` — QDBusConnection, QDBusInterface, QDBusMessage, QDBusContext
 - `Qt6::Concurrent` — QtConcurrent::run para operaciones DB asíncronas
 - `Qt6::Test` — SOLO en target de tests, nunca en el binario principal
 
@@ -37,7 +37,7 @@ Solo se permite lo que figura aquí. Todo lo demás está prohibido por defecto.
 - `Qt6Keychain` via `find_package(Qt6Keychain REQUIRED)` — solo para tokens OAuth2
 
 **Build:**
-- CMake 3.21+ exclusivamente.
+- CMake 3.21+ exclusivamente (`arch=('x86_64' 'aarch64')` en `PKGBUILD`).
 
 ### 1.2 Lista Negra (Prohibiciones Explícitas)
 
@@ -270,6 +270,14 @@ Text { font.family: "iA Writer Mono"; font.pixelSize: 13 }
 Text { font.family: "monospace" } // PROHIBIDO
 ```
 
+**Internacionalización (i18n — Omarchy 4.5):**
+- Todo string visible en QML DEBE envolverse en `qsTr("...")` (con clave base en inglés) y en C++ en `QCoreApplication::translate(...)` o `tr("...")`.
+- Usar placeholders `%1` con `.arg()` en lugar de concatenar fragmentos traducidos.
+- `Translator` (`QTranslator` respaldado por catálogos JSON en `:/qt/qml/OmaDo/i18n/<code>.json`) observa `~/.config/omarchy/language` con `QFileSystemWatcher` y dispara `QQmlEngine::retranslate()` en caliente.
+
+**Integración con Wayland, Floating Workspaces y Dock (Omarchy 4.5):**
+- Siempre invocar `QGuiApplication::setDesktopFileName(QStringLiteral("omado"))` y `setWindowIcon(...)` en `main.cpp` para que el compositor Hyprland y `omarchy.dock` asocien la ventana a `omado.desktop` al fijar al dock o minimizar (`Super + M`).
+
 **Foco:**
 - TODO elemento interactivo: `activeFocusOnTab: true`.
 - TODO elemento con foco: mostrar `FocusRect` (2px, `Theme.accent`).
@@ -297,47 +305,64 @@ Los tokens NUNCA pueden ir a: `QSettings`, archivos planos, variables de entorno
 
 ---
 
-## REGLA 9 — Notificaciones: Solo via QDBus
+## REGLA 9 — Notificaciones: Solo via QDBus (Motor Omapager / Omarchy 4.5)
 
 ```cpp
-// CORRECTO — D-Bus nativo, sin QProcess
+// CORRECTO — D-Bus nativo con hints y acciones de Omarchy 4.5, sin QProcess
 QDBusInterface iface("org.freedesktop.Notifications",
                      "/org/freedesktop/Notifications",
                      "org.freedesktop.Notifications",
                      QDBusConnection::sessionBus());
-iface.call("Notify", "OmaDo", 0u, "checkbox-checked",
-           title, body, QStringList(), QVariantMap(), 5000);
+
+QStringList actions = {
+    QStringLiteral("complete"), tr("Complete"),
+    QStringLiteral("snooze-15"), tr("Snooze 15 min")
+};
+QVariantMap hints;
+hints.insert(QStringLiteral("desktop-entry"), QStringLiteral("omado"));
+hints.insert(QStringLiteral("urgency"), QVariant::fromValue<uchar>(isHighImportance ? 2 : 1));
+hints.insert(QStringLiteral("transient"), isEphemeral);
+
+QDBusMessage reply = iface.call("Notify", "OmaDo", replacesId, "omado",
+                                title, body, actions, hints, timeoutMs);
 
 // INCORRECTO
 QProcess::execute("notify-send", {title, body});          // PROHIBIDO
 QProcess::execute("omarchy-notification-send", {title});  // PROHIBIDO
 ```
 
+**Reglas del motor de notificaciones de Omarchy 4.5 (`omarchy.notifications`):**
+- Siempre enviar `app_name = "OmaDo"`, `app_icon = "omado"` y `hints["desktop-entry"] = "omado"` para asegurar agrupación por remitente, resolución de icono y soporte de *Snooze* por app en el shell.
+- Suscribirse en el demonio a las señales D-Bus `ActionInvoked(uint id, QString action_key)` y `NotificationClosed(uint id, uint reason)` mediante `QDBusConnection::connect(...)`.
+- Enviar `hints["transient"] = true` en avisos efímeros (ej. estado de sync) para no contaminar el historial persistente (`history.json`) de Omarchy 4.5; dejar `transient = false` únicamente en recordatorios reales de tareas.
+- Mapear `importance == "high"` a `urgency = 2` (Critical) y el resto a `urgency = 1` (Normal).
+
 ---
 
 ## REGLA 10 — Testing
 
 **Cobertura mínima por hito:**
-- Hito 1: ThemeReader (5+ fixtures), Database (schema + migraciones), LocalRepository (CRUD completo).
-- Hito 2: NotificationService (mock D-Bus), reminder monitor (QTimer mock).
-- Hito 3: AuthManager (PKCE generation + server mock), SyncEngine (GraphClient mockeado).
+- **Hito 1:** `tst_ThemeReader` (5+ fixtures), `tst_Database` (schema + migraciones v1–v4+), `tst_LocalRepository` (CRUD completo).
+- **Hito 2:** `tst_NotificationService` (mock D-Bus), `tst_ReminderService` (monitor y marcado en DB), `tst_DaemonService` (métodos y señales D-Bus).
+- **Hito 3:** `tst_AuthManager` (PKCE generation + estado), `tst_GraphClient` (serialización JSON Graph API y sync).
+- **Hito 5–6:** `tst_TaskInputParser` (fechas/horas bilingües ES/EN), `tst_TaskModel` (filtros, ordenamiento por vencimiento, subtareas), `tst_TaskListModel` (emojis, renombrado).
+- **Hito 7 (Notificaciones 4.5):** `tst_NotificationService` (verificación de `actions`, `hints` [`desktop-entry`, `urgency`, `transient`], `replacesId`, captura de `uint notificationId` y emisión de `actionInvoked`), `tst_ReminderService` (mapeo `notificationId -> taskId`, ejecución de acciones `"complete"` y `"snooze-15"`, cuerpo enriquecido con conteo de subtareas y preservación de URLs).
+- **Hito 8 (Mi Día Inteligente & NLP 2.0):** `tst_LocalRepository` (`fetchOverdueTasks`, `rescheduleTaskForMyDay` preservando hora original o fallback `+1h`, `snoozeTaskReminder`), `tst_TaskInputParser` (tokens `!`, `#Lista` y recurrencia), `tst_DaemonService` (`CreateTaskFromNaturalText`, `PreviewNaturalText`, `GetOverdueTasks`, `RescheduleTaskForMyDay`, `SnoozeTask`).
+- **Hito 9 (Idiomas 4.5, Quick-Add y CLI):** `tst_Translator` (lectura y hot-reload de archivo `language` temporal, cadena de fallback `es-MX -> es -> en`, plurales CLDR), `tst_CliRunner` (parseo y ejecución de subcomandos `add`, `list`, `done`, `sync`).
 
 **Estructura:**
 ```cmake
-# tests/CMakeLists.txt
-find_package(Qt6 REQUIRED COMPONENTS Test Sql)
-qt_add_executable(omado_tests
-    tst_ThemeReader.cpp
-    tst_Database.cpp
-    tst_LocalRepository.cpp
-    ...
-)
-target_link_libraries(omado_tests PRIVATE Qt6::Test Qt6::Sql omado_lib)
-add_test(NAME OmaDoTests COMMAND omado_tests)
+# tests/CMakeLists.txt — un ejecutable por suite registrado en CTest
+find_package(Qt6 REQUIRED COMPONENTS Core Test Sql DBus)
+foreach(test_name ${TEST_TARGETS})
+    qt_add_executable(${test_name} ${test_name}.cpp)
+    target_link_libraries(${test_name} PRIVATE Qt6::Core Qt6::Test Qt6::Sql Qt6::DBus omado_lib)
+    add_test(NAME ${test_name} COMMAND ${test_name})
+endforeach()
 ```
 
-Fixtures JSON y TOML en `tests/fixtures/`. Nunca requests reales en tests automáticos.
-DB de tests siempre en `:memory:` (no en disco).
+- Activar siempre `QStandardPaths::setTestModeEnabled(true)` en `initTestCase()` para aislar la base de datos SQLite de prueba de la base de datos real del usuario.
+- Fixtures JSON y TOML en `tests/fixtures/`. Nunca requests de red reales en tests automáticos.
 
 ---
 
@@ -348,19 +373,19 @@ Antes de implementar cualquier feature, en este orden:
 1. **Leer SPECS.md** — ¿la feature está especificada? Si no: detener y preguntar.
 2. **Verificar ROADMAP.md** — ¿la tarea está en el hito activo?
 3. **Comprobar dependencias** — ¿requiere algo? ¿está en la Lista Blanca de REGLA 1?
-4. **Identificar el archivo** — ¿qué clase del árbol de SPECS §3?
-5. **Escribir código** — seguir REGLAS 5, 6, 7.
+4. **Identificar el archivo** — ¿qué clase del árbol de SPECS §4?
+5. **Escribir código** — seguir REGLAS 5, 6, 7, 9.
 6. **Escribir/actualizar tests** — REGLA 10. Sin código sin tests.
-7. **Verificar compilación** — `cmake --build build` sin warnings con `-Wall -Wextra`.
+7. **Verificar compilación y tests** — `cmake --build build && ctest --test-dir build --output-on-failure` sin warnings con `-Wall -Wextra`.
 8. **Actualizar ROADMAP.md** — marcar tarea como ✅.
 
 ---
 
 ## REGLA 12 — Prohibiciones Estructurales
 
-- NO bifurcar el árbol de fuentes sin actualizar SPECS.md §3.
-- NO usar `QApplication` (solo `QGuiApplication` o `QCoreApplication` para daemon).
-- NO usar `QThread` sin justificación en el commit. Preferir `QtConcurrent::run`.
+- NO bifurcar el árbol de fuentes sin actualizar SPECS.md §4.
+- NO usar `QApplication` (solo `QGuiApplication` para GUI/Quick-Add o `QCoreApplication` para daemon/CLI).
+- NO usar `QThread` sin justificación en el commit. Preferir `QtConcurrent::run` sobre el `QThreadPool` dedicado de `LocalRepository`.
 - NO emitir signals desde constructores.
 - NO usar `Q_OBJECT` en structs de datos (`Task`, `TaskList`, `TaskStep`).
 - NO `#ifdef Q_OS_WIN` ni guards de plataforma no-Linux.
@@ -381,11 +406,13 @@ Antes de implementar cualquier feature, en este orden:
 | ID local único | `QUuid::createUuid().toString(QUuid::WithoutBraces)` |
 | Leer archivo | `QFile f(path); f.open(QIODevice::ReadOnly); f.readAll()` |
 | Watch archivo | `QFileSystemWatcher::addPath(path)` |
+| Traducción dinámica 4.5 | `Translator : public QTranslator` observando `~/.config/omarchy/language` |
 | Timer one-shot | `QTimer::singleShot(ms, this, &MyClass::slot)` |
 | Fecha hoy (SQL) | `QDate::currentDate().toString(Qt::ISODate)` |
-| DB en memoria (tests) | `QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:")` |
-| Operación asíncrona DB | `QtConcurrent::run([=]() { ... })` + `QFutureWatcher` |
+| Aislamiento DB (tests) | `QStandardPaths::setTestModeEnabled(true)` |
+| Operación asíncrona DB | `QtConcurrent::run(&m_threadPool, [=]() { ... })` + `QFutureWatcher` |
 | Notificación D-Bus | `QDBusInterface("org.freedesktop.Notifications", ...)` |
+| Señales D-Bus externas | `QDBusConnection::sessionBus().connect("org.freedesktop.Notifications", ...)` |
 | Servicio D-Bus propio | `QDBusConnection::sessionBus().registerService("io.omarchy.OmaDo")` |
 
 ---
@@ -419,12 +446,12 @@ El SidePanel SIEMPRE tiene exactamente esta estructura vertical:
 
 ```
 ┌──────────────────────────┐
-│  My Day                  │  ← SpecialListSection.qml
-│  Schedule                │     (hardcodeado, no editable)
+│  My Day                  │  ← Vistas especiales fijas
+│  Schedule                │     (hardcodeadas, no editables)
 │  Tasks                   │
 │ ─────────────────────── │  ← SectionSeparator.qml (1px, Theme.border)
-│  Lista custom 1          │  ← UserListSection.qml
-│  Lista custom 2          │     (listas del usuario)
+│  Lista custom 1          │  ← Listas del usuario (con soporte de emoji/icono)
+│  Lista custom 2          │
 │  + New List              │
 │                          │
 │ [Log in on MS To Do]     │  ← footer, pegado al bottom
@@ -434,19 +461,19 @@ El SidePanel SIEMPRE tiene exactamente esta estructura vertical:
 - Las 3 vistas especiales (My Day, Schedule, Tasks) son **fijas e inmutables** en el orden de arriba.
 - No se puede mover, renombrar ni eliminar My Day, Schedule ni Tasks.
 - El separador `SectionSeparator.qml` SIEMPRE está presente.
-- El footer "Log in on MS To Do" SIEMPRE pegado al `bottom` del SidePanel con `anchors.bottom`.
+- El footer de cuenta/sincronización SIEMPRE está pegado al `bottom` del SidePanel.
 
 ### 13.3 InputBar: Zona C Obligatoria
 
 La `InputBar.qml` SIEMPRE aparece anclada al bottom del `TaskView`. Nunca desaparece.
-Los tres iconos (📅 ⏰ 🔄 📝) son SIEMPRE visibles en el InputBar — no se ocultan.
+Los cuatro iconos de configuración rápida (calendario, recordatorio, repetición, subtareas) son SIEMPRE visibles en el InputBar — no se ocultan.
 
 ```qml
 // CORRECTO — InputBar pegada al bottom
 TaskView {
     InputBar {
-        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-        height: 44
+        Layout.fillWidth: true
+        height: 46
     }
 }
 
@@ -454,34 +481,12 @@ TaskView {
 InputBar { visible: listSelected }  // PROHIBIDO — siempre visible
 ```
 
-### 13.4 Iconos: Solo Unicode / Texto
+### 13.4 Iconos: SVG Monocromáticos Embebidos (`AppIcon.qml`) y Unicode
 
-Los iconos de la interfaz se implementan con caracteres Unicode.
-**Prohibido** usar archivos de imagen (PNG, SVG externos) para iconos de UI.
+- Los iconos del sistema de la interfaz se implementan mediante el componente `AppIcon.qml` usando exclusivamente los vectores SVG monocromáticos embebidos en recursos (`icons/*.svg`) teñidos dinámicamente con `Theme.*`, o glifos Unicode de `iA Writer Mono`.
+- Las listas personalizadas del usuario soportan un slot único que alterna entre el icono vectorial `list` por defecto y un emoji Unicode seleccionado en `ListIconPickerPopup.qml`.
+- **Prohibido** cargar imágenes raster externas (PNG/JPG) para iconos de UI.
 
-```qml
-// CORRECTO
-Text { text: "✓"; font.family: "iA Writer Mono" }
-Text { text: "≡" }
-Text { text: "✕" }   // cerrar ventana
+### 13.5 Sin Diálogos Nativos Bloqueantes
 
-// INCORRECTO
-Image { source: ":/icons/close.png" }  // PROHIBIDO para iconos de UI
-```
-
-### 13.5 Eliminación de Tareas: Sin Diálogos Modales
-
-La confirmación de eliminación (icono 🗑) DEBE ocurrir dentro del InputBar, no en un diálogo.
-
-```qml
-// CORRECTO — confirmación inline en el InputBar
-// Al hacer clic en 🗑:
-//   InputBar cambia temporalmente a: "¿Eliminar «Título de tarea»?" [Sí] [No]
-//   Timeout de 5s → auto-cancelar
-//   Sí → delete → restaurar InputBar normal
-
-// INCORRECTO
-Dialog { ... }         // PROHIBIDO
-MessageBox { ... }     // PROHIBIDO
-QMessageBox { ... }    // PROHIBIDO (también desde C++)
-```
+- **Prohibido** usar `QMessageBox` o diálogos del sistema operativo que bloqueen el event loop. Todos los menús y popups (`DatePickerPopup`, `TimePickerPopup`, `ListContextMenu`, `ListIconPickerPopup`, `ListRenameDialog`) se renderizan como componentes QML inline/overlay estilizados con `Theme.*`.

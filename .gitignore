@@ -27,3 +27,7 @@ omado_tests
 *.pkg.tar.zst
 pkg/
 src/omado/
+
+# Notes
+OmaDo y Omarchy 4.5.md
+
