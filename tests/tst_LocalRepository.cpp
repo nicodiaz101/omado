@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QStandardPaths>
 #include "core/Database.h"
 #include "models/LocalRepository.h"
 
@@ -11,6 +12,7 @@ private:
 
 private slots:
     void initTestCase() {
+        QStandardPaths::setTestModeEnabled(true);
         m_db = new Database(this);
         QVERIFY(m_db->initialize());
         m_repo = new LocalRepository(this);
@@ -305,6 +307,49 @@ private slots:
         // Limpieza
         m_repo->deleteTask(createdToday.id).result();
         m_repo->deleteTask(createdTomorrow.id).result();
+        m_repo->deleteList(list.id).result();
+    }
+
+    void testSnoozeAndRescheduleOverdue() {
+        TaskList list = m_repo->createList("Overdue List").result();
+
+        // 1. Crear tarea vencida
+        Task overdueTask;
+        overdueTask.listId = list.id;
+        overdueTask.title = "Tarea vencida ayer";
+        overdueTask.dueDate = QDate::currentDate().addDays(-1);
+        overdueTask.reminderAt = QDateTime::currentDateTime().addDays(-1);
+        overdueTask.isCompleted = false;
+        overdueTask.reminded = true;
+
+        Task created = m_repo->createTask(overdueTask).result();
+        QVERIFY(!created.id.isEmpty());
+
+        // Verificar fetchOverdueTasks
+        QList<Task> overdueList = m_repo->fetchOverdueTasks().result();
+        bool found = false;
+        for (const Task &t : overdueList) {
+            if (t.id == created.id) found = true;
+        }
+        QVERIFY(found);
+
+        // Probar snoozeTaskReminder
+        bool snoozeOk = m_repo->snoozeTaskReminder(created.id, 20).result();
+        QVERIFY(snoozeOk);
+        Task snoozed = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(snoozed.reminded, false);
+        QVERIFY(snoozed.reminderAt > QDateTime::currentDateTime().addSecs(15 * 60));
+
+        // Probar rescheduleTaskForMyDay
+        bool reschedOk = m_repo->rescheduleTaskForMyDay(created.id).result();
+        QVERIFY(reschedOk);
+        Task rescheduled = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(rescheduled.isMyDay, true);
+        QCOMPARE(rescheduled.dueDate, QDate::currentDate());
+        QCOMPARE(rescheduled.reminded, false);
+
+        // Limpieza
+        m_repo->deleteTask(created.id).result();
         m_repo->deleteList(list.id).result();
     }
 };

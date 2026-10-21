@@ -29,6 +29,9 @@ public:
     QFuture<Task> fetchTaskById(const QString &id);
     QFuture<bool> toggleTask(const QString &taskId, bool completed);
     QFuture<bool> markReminded(const QString &taskId, bool reminded = true);
+    QFuture<bool> snoozeTaskReminder(const QString &taskId, int minutes = 15);
+    QFuture<bool> rescheduleTaskForMyDay(const QString &taskId);
+    QFuture<QList<Task>> fetchOverdueTasks();
 
     QFuture<TaskStep> addStep(const QString &taskId, const QString &title);
     QFuture<bool> updateStep(const TaskStep &step);

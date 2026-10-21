@@ -407,6 +407,100 @@ QFuture<bool> LocalRepository::markReminded(const QString &taskId, bool reminded
     });
 }
 
+QFuture<bool> LocalRepository::snoozeTaskReminder(const QString &taskId, int minutes) {
+    return QtConcurrent::run(&m_threadPool, [taskId, minutes]() {
+        QSqlDatabase db = getThreadDb();
+        QDateTime newReminder = QDateTime::currentDateTime().addSecs(minutes * 60);
+        QDateTime now = QDateTime::currentDateTime();
+        QSqlQuery q(db);
+        q.prepare("UPDATE tasks SET reminder_at = :reminder_at, reminded = 0, updated_at = :updated_at WHERE id = :id");
+        q.bindValue(":reminder_at", newReminder.toString(Qt::ISODateWithMs));
+        q.bindValue(":updated_at", now.toString(Qt::ISODateWithMs));
+        q.bindValue(":id", taskId);
+        bool ok = q.exec();
+        if (!ok) {
+            qWarning() << "[LocalRepository] snoozeTaskReminder error:" << q.lastError().text();
+        }
+        return ok;
+    });
+}
+
+QFuture<bool> LocalRepository::rescheduleTaskForMyDay(const QString &taskId) {
+    return QtConcurrent::run(&m_threadPool, [taskId]() {
+        QSqlDatabase db = getThreadDb();
+        QDateTime now = QDateTime::currentDateTime();
+        QDate today = now.date();
+
+        // Obtener la tarea actual para revisar su recordatorio
+        QSqlQuery qf(db);
+        qf.prepare("SELECT reminder_at FROM tasks WHERE id = :id");
+        qf.bindValue(":id", taskId);
+        if (!qf.exec() || !qf.next()) {
+            return false;
+        }
+
+        QString remStr = qf.value(0).toString();
+        QDateTime oldRem = QDateTime::fromString(remStr, Qt::ISODate);
+        if (!oldRem.isValid()) {
+            oldRem = QDateTime::fromString(remStr, "yyyy-MM-dd HH:mm:ss");
+        }
+
+        QString newRemStr;
+        int newReminded = 0;
+        if (oldRem.isValid()) {
+            // Mover la fecha a hoy manteniendo la hora original si aún es futura hoy
+            QDateTime candidate(today, oldRem.time());
+            if (candidate > now) {
+                newRemStr = candidate.toString(Qt::ISODateWithMs);
+                newReminded = 0;
+            } else {
+                // Si la hora ya pasó hoy, reprogramar a now + 1 hora
+                newRemStr = now.addSecs(3600).toString(Qt::ISODateWithMs);
+                newReminded = 0;
+            }
+        }
+
+        QSqlQuery qu(db);
+        if (!newRemStr.isEmpty()) {
+            qu.prepare("UPDATE tasks SET is_my_day = 1, due_date = :due_date, reminder_at = :reminder_at, reminded = :reminded, updated_at = :updated_at WHERE id = :id");
+            qu.bindValue(":due_date", today.toString(Qt::ISODate));
+            qu.bindValue(":reminder_at", newRemStr);
+            qu.bindValue(":reminded", newReminded);
+        } else {
+            qu.prepare("UPDATE tasks SET is_my_day = 1, due_date = :due_date, updated_at = :updated_at WHERE id = :id");
+            qu.bindValue(":due_date", today.toString(Qt::ISODate));
+        }
+        qu.bindValue(":updated_at", now.toString(Qt::ISODateWithMs));
+        qu.bindValue(":id", taskId);
+        bool ok = qu.exec();
+        if (!ok) {
+            qWarning() << "[LocalRepository] rescheduleTaskForMyDay error:" << qu.lastError().text();
+        }
+        return ok;
+    });
+}
+
+QFuture<QList<Task>> LocalRepository::fetchOverdueTasks() {
+    return QtConcurrent::run(&m_threadPool, []() {
+        QList<Task> tasks;
+        QSqlDatabase db = getThreadDb();
+        QSqlQuery q(db);
+        // Tareas incompletas vencidas por due_date < hoy O reminder_at < now (y no completadas)
+        QString todayStr = QDate::currentDate().toString(Qt::ISODate);
+        QString nowStr = QDateTime::currentDateTime().toString(Qt::ISODate);
+        q.prepare("SELECT * FROM tasks WHERE is_completed = 0 AND ((due_date IS NOT NULL AND due_date != '' AND due_date < :today) OR (reminder_at IS NOT NULL AND reminder_at != '' AND reminder_at < :now)) ORDER BY sort_order ASC, created_at DESC");
+        q.bindValue(":today", todayStr);
+        q.bindValue(":now", nowStr);
+        if (q.exec()) {
+            while (q.next()) tasks.append(mapToTask(q, db, false));
+            populateStepsForTasks(tasks, db);
+        } else {
+            qWarning() << "[LocalRepository] fetchOverdueTasks error:" << q.lastError().text();
+        }
+        return tasks;
+    });
+}
+
 QFuture<bool> LocalRepository::updateList(const TaskList &list) {
     return QtConcurrent::run(&m_threadPool, [list]() {
         QSqlDatabase db = getThreadDb();
@@ -540,6 +634,7 @@ QFuture<QList<Task>> LocalRepository::getPendingReminders() {
         q.bindValue(":now", QDateTime::currentDateTime().toString(Qt::ISODate));
         if (q.exec()) {
             while (q.next()) tasks.append(mapToTask(q, db, false));
+            populateStepsForTasks(tasks, db);
         } else {
             qWarning() << "[LocalRepository] getPendingReminders error:" << q.lastError().text();
         }
