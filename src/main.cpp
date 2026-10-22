@@ -10,32 +10,60 @@
 #include "models/LocalRepository.h"
 #include "models/TaskListModel.h"
 #include "models/TaskModel.h"
+#include "core/Translator.h"
+#include "core/CliRunner.h"
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QFontDatabase>
+#include <QIcon>
+#include <QtDBus/QDBusConnection>
 #include <QDebug>
 #include <QTextStream>
 
 int main(int argc, char *argv[])
 {
     bool isDaemon = false;
+    bool isQuickAdd = false;
+    QStringList cliArgs;
+
     for (int i = 1; i < argc; ++i) {
         QString arg = QString::fromUtf8(argv[i]);
         if (arg == "--daemon" || arg == "-d") {
             isDaemon = true;
-            break;
+        } else if (arg == "--quick-add") {
+            isQuickAdd = true;
         } else if (arg == "--version" || arg == "-v") {
-            QTextStream(stdout) << "OmaDo v1.3.0" << Qt::endl;
+            QTextStream(stdout) << "OmaDo v2.0.0 (Omarchy 4.5)" << Qt::endl;
             return 0;
+        } else if (!arg.startsWith("-")) {
+            // Comandos CLI (add, list, done, reschedule)
+            for (int j = i; j < argc; ++j) {
+                cliArgs.append(QString::fromUtf8(argv[j]));
+            }
+            break;
         }
+    }
+
+    if (!cliArgs.isEmpty()) {
+        QCoreApplication app(argc, argv);
+        app.setOrganizationName("omacom-io");
+        app.setApplicationName("OmaDo");
+        app.setApplicationVersion("2.0.0");
+
+        Database db;
+        if (!db.initialize()) {
+            return 1;
+        }
+        LocalRepository repo;
+        return CliRunner::run(cliArgs, &repo);
     }
 
     if (isDaemon) {
         QCoreApplication app(argc, argv);
         app.setOrganizationName("omacom-io");
         app.setApplicationName("OmaDo");
-        app.setApplicationVersion("1.3.0");
+        app.setApplicationVersion("2.0.0");
 
         Database db;
         if (!db.initialize()) {
@@ -82,7 +110,9 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setOrganizationName("omacom-io");
     app.setApplicationName("OmaDo");
-    app.setApplicationVersion("1.3.0");
+    app.setApplicationVersion("2.0.0");
+    app.setDesktopFileName(QStringLiteral("omado"));
+    app.setWindowIcon(QIcon(":/qt/qml/OmaDo/icons/omado.svg"));
 
     // Cargar fuentes
     int fontId = QFontDatabase::addApplicationFont(":/qt/qml/OmaDo/fonts/iAWriterMono-Regular.ttf");
@@ -107,8 +137,6 @@ int main(int argc, char *argv[])
     }
 
     LocalRepository *repo = new LocalRepository(&app);
-    // En modo UI no instanciamos servicios pesados en segundo plano (Graph, Reminder),
-    // dependemos de la base de datos y de D-Bus para comunicarnos con el daemon.
     
     KeychainStore *keychain = new KeychainStore(&app);
     AuthManager *authManager = new AuthManager(keychain, &app);
@@ -124,6 +152,35 @@ int main(int argc, char *argv[])
         }
     });
 
+    // Escuchar cambios D-Bus desde el daemon u otros procesos de Omarchy para refresco instantáneo
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (bus.isConnected()) {
+        bus.connect(
+            QString(),
+            QStringLiteral("/io/omarchy/OmaDo"),
+            QStringLiteral("io.omarchy.OmaDo"),
+            QStringLiteral("TodayTasksChanged"),
+            taskModel,
+            SLOT(loadTasks())
+        );
+        bus.connect(
+            QString(),
+            QStringLiteral("/io/omarchy/OmaDo"),
+            QStringLiteral("io.omarchy.OmaDo"),
+            QStringLiteral("TasksChanged"),
+            taskModel,
+            SLOT(loadTasks())
+        );
+        bus.connect(
+            QString(),
+            QStringLiteral("/io/omarchy/OmaDo"),
+            QStringLiteral("io.omarchy.OmaDo"),
+            QStringLiteral("TasksChanged"),
+            listModel,
+            SLOT(loadLists())
+        );
+    }
+
     qmlRegisterSingletonInstance("OmaDo.Models", 1, 0, "TaskListModel", listModel);
     qmlRegisterSingletonInstance("OmaDo.Models", 1, 0, "TaskModel", taskModel);
     qmlRegisterSingletonInstance("OmaDo.Auth", 1, 0, "AuthManager", authManager);
@@ -136,6 +193,10 @@ int main(int argc, char *argv[])
     engine.addImportPath(":/");
     engine.addImportPath(":/qt/qml");
 
+    // Instalar traductor multilenguaje con observación en vivo de Omarchy
+    Translator *translator = new Translator(&engine, &app);
+    app.installTranslator(translator);
+
     QObject::connect(
         &engine,
         &QQmlApplicationEngine::objectCreationFailed,
@@ -143,8 +204,11 @@ int main(int argc, char *argv[])
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
     
-    // Qt 6.5+ recomendado: loadFromModule
-    engine.loadFromModule("OmaDo", "Main");
+    if (isQuickAdd) {
+        engine.loadFromModule("OmaDo", "QuickAddWindow");
+    } else {
+        engine.loadFromModule("OmaDo", "Main");
+    }
 
     return app.exec();
 }
