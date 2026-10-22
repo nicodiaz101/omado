@@ -1,6 +1,10 @@
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QUuid>
 #include "DaemonService.h"
 #include "models/LocalRepository.h"
+#include "TaskInputParser.h"
 #include <QtDBus/QDBusMetaType>
 #include <QDebug>
 
@@ -153,4 +157,123 @@ bool DaemonService::DeleteTask(const QString &taskId) {
 void DaemonService::RequestSync() {
     qDebug() << "[DaemonService] Solicitud de sincronización recibida vía D-Bus";
     emit SyncRequested();
+}
+
+QString DaemonService::CreateTaskFromNaturalText(const QString &rawInput, bool addToMyDay) {
+    if (!m_repository || rawInput.trimmed().isEmpty()) {
+        return QString();
+    }
+
+    auto parsed = TaskInputParser::parse(rawInput);
+
+    // Determinar la lista destino
+    QString targetListId = QStringLiteral("default-tasks");
+    if (parsed.hasTargetList && !parsed.targetListName.isEmpty()) {
+        auto lists = m_repository->fetchLists().result();
+        bool found = false;
+        for (const auto &l : lists) {
+            if (l.displayName.compare(parsed.targetListName, Qt::CaseInsensitive) == 0) {
+                targetListId = l.id;
+                found = true;
+                break;
+            }
+        }
+        // Si no existe la lista, la creamos
+        if (!found) {
+            TaskList createdList = m_repository->createList(parsed.targetListName).result();
+            if (!createdList.id.isEmpty()) {
+                targetListId = createdList.id;
+            }
+        }
+    }
+
+    Task task;
+    task.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    task.listId = targetListId;
+    task.title = parsed.cleanTitle;
+    task.isCompleted = false;
+    task.isMyDay = addToMyDay;
+    task.importance = parsed.hasImportance ? parsed.importance : QStringLiteral("normal");
+    task.recurrence = parsed.hasRecurrence ? parsed.recurrence : QStringLiteral("none");
+    if (parsed.hasDueDate) {
+        task.dueDate = parsed.dueDate;
+    }
+    if (parsed.hasReminder) {
+        task.reminderAt = parsed.reminderAt;
+    }
+
+    Task created = m_repository->createTask(task).result();
+    if (!created.id.isEmpty()) {
+        emit TasksChanged(targetListId);
+        if (addToMyDay || task.dueDate == QDate::currentDate() || (task.reminderAt.isValid() && task.reminderAt.date() == QDate::currentDate())) {
+            emit TodayTasksChanged();
+        }
+        return created.id;
+    }
+
+    return QString();
+}
+
+QString DaemonService::PreviewNaturalText(const QString &rawInput) {
+    auto parsed = TaskInputParser::parse(rawInput);
+    QJsonObject obj;
+    obj["cleanTitle"] = parsed.cleanTitle;
+    obj["hasDueDate"] = parsed.hasDueDate;
+    obj["dueDate"] = parsed.hasDueDate ? parsed.dueDate.toString(Qt::ISODate) : QString();
+    obj["hasReminder"] = parsed.hasReminder;
+    obj["reminderAt"] = parsed.hasReminder ? parsed.reminderAt.toString("yyyy-MM-dd HH:mm") : QString();
+    obj["hasImportance"] = parsed.hasImportance;
+    obj["importance"] = parsed.importance;
+    obj["hasTargetList"] = parsed.hasTargetList;
+    obj["targetListName"] = parsed.targetListName;
+    obj["hasRecurrence"] = parsed.hasRecurrence;
+    obj["recurrence"] = parsed.recurrence;
+    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
+QString DaemonService::GetOverdueTasks() {
+    if (!m_repository) return QStringLiteral("[]");
+    auto future = m_repository->fetchOverdueTasks();
+    QList<Task> tasks = future.result();
+
+    QVariantList result;
+    for (const Task &t : tasks) {
+        QVariantMap map;
+        map.insert(QStringLiteral("id"), t.id);
+        map.insert(QStringLiteral("listId"), t.listId);
+        map.insert(QStringLiteral("title"), t.title);
+        map.insert(QStringLiteral("body"), t.body);
+        map.insert(QStringLiteral("isCompleted"), t.isCompleted);
+        map.insert(QStringLiteral("isMyDay"), t.isMyDay);
+        map.insert(QStringLiteral("importance"), t.importance);
+        map.insert(QStringLiteral("dueDate"), t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : QString());
+        map.insert(QStringLiteral("reminderAt"), t.reminderAt.isValid() ? t.reminderAt.toString(Qt::ISODate) : QString());
+        map.insert(QStringLiteral("recurrence"), t.recurrence);
+        result.append(map);
+    }
+    return QString::fromUtf8(QJsonDocument::fromVariant(result).toJson(QJsonDocument::Compact));
+}
+
+bool DaemonService::RescheduleTaskForMyDay(const QString &taskId) {
+    if (!m_repository || taskId.isEmpty()) return false;
+
+    auto future = m_repository->rescheduleTaskForMyDay(taskId);
+    bool ok = future.result();
+    if (ok) {
+        emit TodayTasksChanged();
+        emit TasksChanged(QString());
+    }
+    return ok;
+}
+
+bool DaemonService::SnoozeTask(const QString &taskId, int minutes) {
+    if (!m_repository || taskId.isEmpty()) return false;
+
+    auto future = m_repository->snoozeTaskReminder(taskId, minutes);
+    bool ok = future.result();
+    if (ok) {
+        emit TodayTasksChanged();
+        emit TasksChanged(QString());
+    }
+    return ok;
 }
