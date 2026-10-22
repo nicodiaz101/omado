@@ -47,7 +47,14 @@ Popup {
 
                     Text {
                         Layout.fillWidth: true
-                        text: modelData.label
+                        text: {
+                            if (modelData.id === "none") return qsTr("Never")
+                            if (modelData.id === "daily") return qsTr("Daily")
+                            if (modelData.id === "workdays") return qsTr("Weekdays (Mon-Fri)")
+                            if (modelData.id === "weekly") return qsTr("Weekly")
+                            if (modelData.id === "monthly") return qsTr("Monthly")
+                            return modelData.label
+                        }
                         color: Theme.foreground
                         font.family: "iA Writer Mono"
                         font.pixelSize: 12

@@ -66,7 +66,12 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: modelData.name
+                            text: {
+                                if (modelData.id === "special-myday") return qsTr("My Day")
+                                if (modelData.id === "special-schedule") return qsTr("Schedule")
+                                if (modelData.id === "special-tasks") return qsTr("Tasks")
+                                return modelData.name
+                            }
                             color: TaskModel.currentListId === modelData.id ? Theme.accent : Theme.foreground
                             font.family: "iA Writer Mono"
                             font.pixelSize: 13
