@@ -13,6 +13,8 @@ class TaskModel : public QAbstractListModel {
     Q_PROPERTY(int selectedIndex READ selectedIndex WRITE setSelectedIndex NOTIFY selectedIndexChanged)
     Q_PROPERTY(QVariantMap selectedTask READ selectedTask NOTIFY selectedTaskChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    Q_PROPERTY(int overdueCount READ overdueCount NOTIFY overdueCountChanged)
+    Q_PROPERTY(QVariantList overdueSuggestions READ overdueSuggestions NOTIFY overdueSuggestionsChanged)
     Q_PROPERTY(bool hideCompleted READ hideCompleted WRITE setHideCompleted NOTIFY hideCompletedChanged)
     Q_PROPERTY(bool sortByDueDate READ sortByDueDate WRITE setSortByDueDate NOTIFY sortByDueDateChanged)
 
@@ -51,6 +53,11 @@ public:
 
     QVariantMap selectedTask() const;
 
+    int overdueCount() const { return m_overdueTasks.count(); }
+    QVariantList overdueSuggestions() const;
+    Q_INVOKABLE void loadOverdueSuggestions();
+    Q_INVOKABLE void rescheduleForMyDay(const QString &taskId);
+
     bool hideCompleted() const { return m_hideCompleted; }
     void setHideCompleted(bool hide);
 
@@ -79,6 +86,8 @@ signals:
     void selectedIndexChanged();
     void selectedTaskChanged();
     void countChanged();
+    void overdueCountChanged();
+    void overdueSuggestionsChanged();
     void hideCompletedChanged();
     void sortByDueDateChanged();
 
@@ -91,8 +100,10 @@ private:
     bool m_hideCompleted = false;
     bool m_sortByDueDate = false;
     QList<Task> m_tasks;
+    QList<Task> m_overdueTasks;
     QList<int> m_visibleIndices;
     QFutureWatcher<QList<Task>> m_watcher;
+    QFutureWatcher<QList<Task>> m_overdueWatcher;
 
     void rebuildVisibleIndices();
     int actualIndex(int row) const;

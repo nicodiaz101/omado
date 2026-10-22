@@ -94,6 +94,12 @@ TaskModel::TaskModel(LocalRepository *repo, GraphClient *graph, SyncEngine *sync
         emit selectedTaskChanged();
         emit countChanged();
     });
+
+    connect(&m_overdueWatcher, &QFutureWatcher<QList<Task>>::finished, this, [this]() {
+        m_overdueTasks = m_overdueWatcher.result();
+        emit overdueCountChanged();
+        emit overdueSuggestionsChanged();
+    });
 }
 
 void TaskModel::rebuildVisibleIndices() {
@@ -289,6 +295,8 @@ QHash<int, QByteArray> TaskModel::roleNames() const {
 void TaskModel::loadTasks() {
     if (!m_repo) return;
     
+    loadOverdueSuggestions();
+
     if (m_currentListId == "special-myday") {
         m_watcher.setFuture(m_repo->fetchMyDayTasks());
     } else if (m_currentListId == "special-schedule") {
@@ -310,6 +318,54 @@ void TaskModel::loadTasks() {
     }
 }
 
+void TaskModel::loadOverdueSuggestions() {
+    if (!m_repo) return;
+    m_overdueWatcher.setFuture(m_repo->fetchOverdueTasks());
+}
+
+QVariantList TaskModel::overdueSuggestions() const {
+    QVariantList list;
+    for (const Task &t : m_overdueTasks) {
+        QVariantList stepList;
+        for (const auto &s : t.steps) {
+            stepList.append(s.toVariantMap());
+        }
+        list.append(QVariantMap{
+            {"id", t.id},
+            {"listId", t.listId},
+            {"title", t.title},
+            {"body", t.body},
+            {"isCompleted", t.isCompleted},
+            {"isMyDay", t.isMyDay},
+            {"importance", t.importance},
+            {"dueDate", t.dueDate.isValid() ? t.dueDate.toString(Qt::ISODate) : ""},
+            {"reminderAt", t.reminderAt.isValid() ? t.reminderAt.toLocalTime().toString("yyyy-MM-dd HH:mm") : ""},
+            {"recurrence", t.recurrence},
+            {"steps", stepList}
+        });
+    }
+    return list;
+}
+
+void TaskModel::rescheduleForMyDay(const QString &taskId) {
+    if (!m_repo || taskId.isEmpty()) return;
+
+    auto future = m_repo->rescheduleTaskForMyDay(taskId);
+    auto *watcher = new QFutureWatcher<bool>(this);
+    connect(watcher, &QFutureWatcher<bool>::finished, this, [this, watcher, taskId]() {
+        bool ok = watcher->result();
+        watcher->deleteLater();
+        if (ok) {
+            // Recargar tareas para reflejar el cambio en My Day y sugerencias
+            loadTasks();
+            if (m_sync) {
+                m_sync->syncNow();
+            }
+        }
+    });
+    watcher->setFuture(future);
+}
+
 void TaskModel::notifyRowChanged(int row) {
     if (row < 0 || row >= rowCount()) return;
     emit dataChanged(index(row), index(row));
@@ -327,6 +383,12 @@ QVariantMap TaskModel::parseInput(const QString &text) const {
     map["hasReminder"] = parsed.hasReminder;
     map["reminderAt"] = parsed.hasReminder ? parsed.reminderAt.toString("yyyy-MM-dd HH:mm") : QString();
     map["reminderTime"] = parsed.hasReminder ? parsed.reminderAt.toString("HH:mm") : QString();
+    map["hasImportance"] = parsed.hasImportance;
+    map["importance"] = parsed.importance;
+    map["hasTargetList"] = parsed.hasTargetList;
+    map["targetListName"] = parsed.targetListName;
+    map["hasRecurrence"] = parsed.hasRecurrence;
+    map["recurrence"] = parsed.recurrence;
     return map;
 }
 
@@ -340,16 +402,25 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
     QString finalTitle = title.trimmed();
     QString finalDueDate = dueDate;
     QString finalReminderAt = reminderAt;
+    QString finalRecurrence = recurrence.isEmpty() ? QStringLiteral("none") : recurrence;
+    QString finalImportance = QStringLiteral("normal");
 
+    // Solo parsear lenguaje natural si no se pasaron dueDate o reminderAt explícitamente
     if (finalDueDate.isEmpty() && finalReminderAt.isEmpty()) {
         auto parsed = TaskInputParser::parse(finalTitle);
-        if (parsed.hasDueDate || parsed.hasReminder) {
+        if (parsed.hasDueDate || parsed.hasReminder || parsed.hasImportance || parsed.hasRecurrence) {
             finalTitle = parsed.cleanTitle;
             if (parsed.hasDueDate) {
                 finalDueDate = parsed.dueDate.toString(Qt::ISODate);
             }
             if (parsed.hasReminder) {
                 finalReminderAt = parsed.reminderAt.toString("yyyy-MM-dd HH:mm");
+            }
+            if (finalRecurrence == QLatin1String("none") && parsed.hasRecurrence) {
+                finalRecurrence = parsed.recurrence;
+            }
+            if (parsed.hasImportance) {
+                finalImportance = parsed.importance;
             }
         }
     }
@@ -359,8 +430,8 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
     t.title = finalTitle;
     t.body = "";
     t.isCompleted = false;
-    t.importance = "normal";
-    t.recurrence = recurrence.isEmpty() ? "none" : recurrence;
+    t.importance = finalImportance;
+    t.recurrence = finalRecurrence;
     t.createdAt = QDateTime::currentDateTime();
 
     if (!finalDueDate.isEmpty()) {

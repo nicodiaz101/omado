@@ -54,6 +54,13 @@ int main(int argc, char *argv[])
         SyncEngine syncEngine(&authManager, &graphClient, &repo);
 
         DaemonService daemonService(&repo);
+        QObject::connect(&reminderService, &ReminderService::reminderActionProcessed,
+                         &daemonService, [&daemonService](const QString &taskId, const QString &actionKey) {
+            Q_UNUSED(taskId);
+            Q_UNUSED(actionKey);
+            emit daemonService.TodayTasksChanged();
+            emit daemonService.TasksChanged(QString());
+        });
         QObject::connect(&daemonService, &DaemonService::SyncRequested, &syncEngine, &SyncEngine::syncNow);
         QObject::connect(&syncEngine, &SyncEngine::syncStarted, &daemonService, &DaemonService::SyncStarted);
         QObject::connect(&syncEngine, &SyncEngine::syncFinished, &daemonService, [&daemonService](bool success, const QString &message) {
