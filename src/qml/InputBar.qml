@@ -98,7 +98,7 @@ Rectangle {
         // Active filters/draft badges preview
         Row {
             spacing: 6
-            visible: root.draftDueDate !== "" || root.draftReminderAt !== "" || root.draftRecurrence !== "none" || root.draftSteps.length > 0 || (root.parsedDraft !== null && root.parsedDraft !== undefined && (root.parsedDraft.hasDueDate || root.parsedDraft.hasReminder))
+            visible: root.draftDueDate !== "" || root.draftReminderAt !== "" || root.draftRecurrence !== "none" || root.draftSteps.length > 0 || (root.parsedDraft !== null && root.parsedDraft !== undefined && (root.parsedDraft.hasDueDate || root.parsedDraft.hasReminder || root.parsedDraft.hasImportance || root.parsedDraft.hasTargetList || root.parsedDraft.hasRecurrence))
 
             // Due date badge (manual)
             Rectangle {
@@ -231,6 +231,98 @@ Rectangle {
                     color: Theme.accent
                     font.family: "iA Writer Mono"
                     font.pixelSize: 10
+                }
+            }
+
+            // Live parsed importance badge (!)
+            Rectangle {
+                visible: root.parsedDraft !== null && root.parsedDraft !== undefined && root.parsedDraft.hasImportance
+                height: 20
+                width: parsedImportanceRow.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
+
+                Row {
+                    id: parsedImportanceRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    AppIcon {
+                        name: "star-filled"
+                        size: 11
+                        color: Theme.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: qsTr("High")
+                        color: Theme.accent
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                        font.bold: true
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            // Live parsed target list badge (#Lista)
+            Rectangle {
+                visible: root.parsedDraft !== null && root.parsedDraft !== undefined && root.parsedDraft.hasTargetList
+                height: 20
+                width: parsedListRow.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+
+                Row {
+                    id: parsedListRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    AppIcon {
+                        name: "folder"
+                        size: 11
+                        color: Theme.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: (root.parsedDraft && root.parsedDraft.targetListName) ? root.parsedDraft.targetListName : ""
+                        color: Theme.accent
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            // Live parsed recurrence badge
+            Rectangle {
+                visible: root.draftRecurrence === "none" && root.parsedDraft !== null && root.parsedDraft !== undefined && root.parsedDraft.hasRecurrence
+                height: 20
+                width: parsedRecurrenceRow.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+
+                Row {
+                    id: parsedRecurrenceRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    AppIcon {
+                        name: "repeat"
+                        size: 11
+                        color: Theme.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: {
+                            if (!root.parsedDraft) return ""
+                            if (root.parsedDraft.recurrence === "daily") return qsTr("Daily")
+                            if (root.parsedDraft.recurrence === "weekly") return qsTr("Weekly")
+                            if (root.parsedDraft.recurrence === "monthly") return qsTr("Monthly")
+                            if (root.parsedDraft.recurrence === "yearly") return qsTr("Yearly")
+                            return root.parsedDraft.recurrence
+                        }
+                        color: Theme.accent
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
         }

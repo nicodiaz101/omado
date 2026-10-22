@@ -70,6 +70,56 @@ Item {
 
                         Item { Layout.fillWidth: true }
 
+                        // Overdue Suggestions Button (visible in My Day when overdueCount > 0)
+                        Rectangle {
+                            id: overdueBtn
+                            visible: TaskModel.currentListId === "special-myday" && TaskModel.overdueCount > 0
+                            height: 24
+                            width: overdueRow.implicitWidth + 14
+                            radius: 12
+                            color: overdueArea.containsMouse
+                                   ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
+                                   : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+                            border.color: Theme.accent
+                            border.width: 1
+
+                            Row {
+                                id: overdueRow
+                                anchors.centerIn: parent
+                                spacing: 5
+
+                                AppIcon {
+                                    name: "sparkles"
+                                    size: 13
+                                    color: Theme.accent
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                Text {
+                                    text: TaskModel.overdueCount + " " + qsTr("suggestions")
+                                    color: Theme.accent
+                                    font.family: "iA Writer Mono"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            MouseArea {
+                                id: overdueArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: suggestionsPopup.open()
+                            }
+
+                            MyDaySuggestionsPopup {
+                                id: suggestionsPopup
+                                y: parent.height + 6
+                                x: parent.width - width
+                            }
+                        }
+
                         // Sort Button: Order by due date / reminder
                         Rectangle {
                             id: sortToggleBtn

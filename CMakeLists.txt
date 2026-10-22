@@ -54,6 +54,7 @@ qt_add_qml_module(omado
         src/qml/components/ListContextMenu.qml
         src/qml/components/ListIconPickerPopup.qml
         src/qml/components/ListRenameDialog.qml
+        src/qml/components/MyDaySuggestionsPopup.qml
     RESOURCES
         fonts/iAWriterMono-Regular.ttf
         fonts/iAWriterMono-Bold.ttf

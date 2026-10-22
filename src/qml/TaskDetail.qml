@@ -413,6 +413,67 @@ Rectangle {
                 }
             }
 
+            // Clickable URL chips detected in body note
+            Flow {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                spacing: 6
+                visible: detectedUrls.length > 0
+
+                property var detectedUrls: {
+                    var text = (root.task && root.task.body !== undefined) ? root.task.body : ""
+                    var matches = text.match(/https?:\/\/[^\s]+/g)
+                    return matches ? matches : []
+                }
+
+                Repeater {
+                    model: parent.detectedUrls
+
+                    delegate: Rectangle {
+                        height: 24
+                        width: Math.min(296, urlChipRow.implicitWidth + 16)
+                        radius: 12
+                        color: urlChipArea.containsMouse
+                               ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
+                               : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12)
+                        border.color: Theme.accent
+                        border.width: 1
+
+                        Row {
+                            id: urlChipRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            AppIcon {
+                                name: "list"
+                                size: 11
+                                color: Theme.accent
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: modelData
+                                color: Theme.accent
+                                font.family: "iA Writer Mono"
+                                font.pixelSize: 10
+                                elide: Text.ElideMiddle
+                                width: Math.min(260, implicitWidth)
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            id: urlChipArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Qt.openUrlExternally(modelData)
+                        }
+                    }
+                }
+            }
+
             Item { Layout.fillHeight: true; Layout.preferredHeight: 20 }
 
             // Bottom Bar: Delete Task Button
