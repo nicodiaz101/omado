@@ -28,12 +28,13 @@ add_library(omado_lib STATIC
     src/core/CliRunner.cpp
 )
 
+file(GLOB OMADO_I18N_FILES "src/i18n/*.json")
+
 qt_add_resources(omado_lib "omado_i18n"
     PREFIX "/qt/qml/OmaDo/i18n"
     BASE "src/i18n"
     FILES
-        src/i18n/en.json
-        src/i18n/es.json
+        ${OMADO_I18N_FILES}
 )
 target_include_directories(omado_lib PUBLIC src/)
 target_link_libraries(omado_lib PUBLIC
