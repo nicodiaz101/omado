@@ -2,10 +2,18 @@
 Type=Application
 Name=OmaDo
 GenericName=Task Manager
-Comment=Lightweight native task manager with Microsoft To Do sync
+GenericName[es]=Gestor de Tareas
+Comment=Lightweight native task manager with Microsoft To Do sync for Omarchy
+Comment[es]=Gestor nativo y ligero de tareas con sincronización de Microsoft To Do para Omarchy
 Exec=omado
 Icon=omado
 Terminal=false
 Categories=Office;ProjectManagement;Utility;
 Keywords=todo;tasks;todoist;microsoft;reminders;omado;
 StartupWMClass=omado
+Actions=QuickAdd;
+
+[Desktop Action QuickAdd]
+Name=Quick Add Task
+Name[es]=Captura Rápida de Tarea
+Exec=omado --quick-add

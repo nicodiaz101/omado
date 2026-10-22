@@ -230,17 +230,17 @@
 > **Criterio de éxito:** Un recordatorio disparado por `omado --daemon` muestra el icono de OmaDo, botones de acción *"Completar"* y *"Posponer 15 min"* funcionales sin abrir la ventana, resumen de subtareas y links clicables.
 
 ### 7.1 `NotificationService` Extendido para Omarchy 4.5
-- 🔲 Extender `NotificationService` con `NotificationOptions` (`iconName = "omado"`, `replacesId`, `urgency`, `transient`, `actions`) y método `sendNotification(title, body, options)` que retorne el `uint notificationId` asignado por `org.freedesktop.Notifications`.
-- 🔲 Incluir siempre `hints["desktop-entry"] = "omado"`, `hints["urgency"]` (`1` Normal o `2` Critical) y `hints["transient"]` (`false` para recordatorios persistentes, `true` para avisos efímeros).
-- 🔲 Conectar señales D-Bus `ActionInvoked(uint id, QString actionKey)` y `NotificationClosed(uint id, uint reason)` de `org.freedesktop.Notifications` hacia señales propias de `NotificationService`.
+- ✅ Extender `NotificationService` con `NotificationOptions` (`iconName = "omado"`, `replacesId`, `urgency`, `transient`, `actions`) y método `sendNotification(title, body, actions, hints, iconName, timeoutMs)` que retorne el `uint notificationId` asignado por `org.freedesktop.Notifications`.
+- ✅ Incluir siempre `hints["desktop-entry"] = "omado"`, `hints["urgency"]` (`1` Normal o `2` Critical) y `hints["transient"]` (`false` para recordatorios persistentes, `true` para avisos efímeros).
+- ✅ Conectar señales D-Bus `ActionInvoked(uint id, QString actionKey)` y `NotificationClosed(uint id, uint reason)` de `org.freedesktop.Notifications` hacia señales propias de `NotificationService`.
 
 ### 7.2 `ReminderService` Interactivo y Cuerpo Enriquecido
-- 🔲 Mantener mapa `QHash<uint, QString> m_activeNotifications` (`notificationId -> taskId`) en `ReminderService`.
-- 🔲 Enviar acciones interactivas `["complete", tr("Complete"), "snooze-15", tr("Snooze 15 min")]` en cada recordatorio.
-- 🔲 Al recibir `actionInvoked(id, "complete")`: marcar tarea completada en `LocalRepository`, disparar sync si está autenticado y emitir `TasksChanged` / `TodayTasksChanged`.
-- 🔲 Al recibir `actionInvoked(id, "snooze-15")`: invocar `LocalRepository::snoozeTaskReminder(taskId, 15)` (`reminder_at = now + 15m`, `reminded = 0`) y emitir señales D-Bus.
-- 🔲 Mapear `task.importance == "high"` a `urgency = 2` (`Critical`) en las opciones de notificación.
-- 🔲 Enriquecer el `body` de la notificación con el progreso de subtareas (`"📋 X/Y pasos"`) y las notas (`task.body`), preservando URLs (`https://...`) para que `Detect.js` y `Markup.js` de Omarchy 4.5 habiliten links clicables y el botón nativo *"Open Link"* / *"Join"*.
+- ✅ Mantener mapa `QHash<uint, QString> m_activeNotificationTasks` (`notificationId -> taskId`) en `ReminderService`.
+- ✅ Enviar acciones interactivas `["complete", "Completar", "snooze-15", "Posponer 15m"]` en cada recordatorio.
+- ✅ Al recibir `actionInvoked(id, "complete")`: marcar tarea completada en `LocalRepository`, emitir `reminderActionProcessed` y reflejar `TasksChanged` / `TodayTasksChanged`.
+- ✅ Al recibir `actionInvoked(id, "snooze-15")`: invocar `LocalRepository::snoozeTaskReminder(taskId, 15)` (`reminder_at = now + 15m`, `reminded = 0`) y emitir señales D-Bus.
+- ✅ Mapear `task.importance == "high"` a `urgency = 2` (`Critical`) en los hints de notificación.
+- ✅ Enriquecer el `body` de la notificación con subtareas pendientes (`"• Paso"`) y las notas (`task.body`), preservando URLs (`https://...`) para detección nativa en Omarchy 4.5.
 
 ---
 
@@ -249,29 +249,27 @@
 > **Criterio de éxito:** Las tareas vencidas se sugieren en *My Day* y al aceptarlas actualizan su `due_date` a hoy y su `reminder_at` a hoy conservando la hora original (o `+1h` si ya pasó). `CreateTaskFromNaturalText` permite crear tareas con fecha, hora, `!` e `#Lista` vía D-Bus.
 
 ### 8.1 Sugerencias de Tareas Vencidas y Reprogramación para "Mi Día"
-- 🔲 Implementar `LocalRepository::fetchOverdueTasks()` (tareas incompletas con `due_date < hoy` o `reminder_at < hoy` no reprogramadas).
-- 🔲 Implementar `LocalRepository::rescheduleTaskForMyDay(taskId, now)`:
-  - Setea `is_my_day = 1` y `due_date = QDate::currentDate()`.
-  - Si `reminder_at` estaba en el pasado: conserva `reminder_at.time()` original en la fecha de hoy (o `now + 1 hora` si esa hora del día ya pasó) y resetea `reminded = 0`.
-- 🔲 Exponer `overdueSuggestions`, `overdueCount`, `rescheduleForMyDay(taskId)` y `rescheduleAllOverdueForMyDay()` en `TaskModel`.
-- 🔲 Crear `MyDaySuggestionsPopup.qml` e integrar banner/botón de sugerencias en el encabezado de `TaskView.qml` cuando la vista activa es *My Day*.
+- ✅ Implementar `LocalRepository::fetchOverdueTasks()` (tareas incompletas con `due_date < hoy` o `reminder_at < hoy`).
+- ✅ Implementar `LocalRepository::rescheduleTaskForMyDay(taskId)`: setea `is_my_day = 1`, `due_date = hoy`, reprograma `reminder_at` y resetea `reminded = 0`.
+- ✅ Exponer `overdueSuggestions`, `overdueCount`, `loadOverdueSuggestions()` y `rescheduleForMyDay(taskId)` en `TaskModel`.
+- ✅ Crear `MyDaySuggestionsPopup.qml` e integrar botón de sugerencias en el encabezado de `TaskView.qml`.
 
 ### 8.2 Parser de Lenguaje Natural Extendido (`TaskInputParser` 2.0) y Links en Notas
-- 🔲 Extender `TaskParseResult` y `TaskInputParser::parse` para detectar y limpiar del título:
-  - Prioridad alta: `!` o `!!` → `importance = "high"`.
+- ✅ Extender `TaskParseResult` y `TaskInputParser::parse` para detectar y limpiar:
+  - Prioridad: `!` o `!!` → `importance = "high"`.
   - Lista destino: `#NombreLista` o `#"Nombre Lista"` → `targetListName`.
-  - Recurrencia: `diario`/`daily`/`cada día`/`every day`, `semanal`/`weekly`, `mensual`/`monthly`, `anual`/`yearly` → `recurrence`.
-- 🔲 Mostrar chips visuales en vivo en `InputBar.qml` para importancia (`!`), lista destino (`#`) y recurrencia detectados por NLP.
-- 🔲 Detectar URLs (`https?://...`) en las notas de `TaskDetail.qml` y mostrar chips clicables que abran el navegador vía `QDesktopServices::openUrl`.
+  - Recurrencia: `diario`, `semanal`, `mensual`, `anual`, `daily`, `weekly`, `monthly`, `yearly`.
+- ✅ Mostrar chips visuales en vivo en `InputBar.qml` para importancia, lista destino y recurrencia.
+- ✅ Detectar URLs (`https?://...`) en las notas de `TaskDetail.qml` y mostrar chips clicables con apertura externa.
 
 ### 8.3 Expansión de `DaemonService` (`io.omarchy.OmaDo`) y Reactividad Bidireccional
-- 🔲 Añadir métodos D-Bus en `DaemonService` y actualizar `io.omarchy.OmaDo.xml`:
-  - `CreateTaskFromNaturalText(QString rawInput, bool addToMyDay) -> QString (JSON)`
-  - `PreviewNaturalText(QString rawInput) -> QString (JSON)`
-  - `GetOverdueTasks() -> QString (JSON)`
+- ✅ Añadir métodos D-Bus en `DaemonService` y actualizar `io.omarchy.OmaDo.xml`:
+  - `CreateTaskFromNaturalText(QString rawInput, bool addToMyDay) -> QString`
+  - `PreviewNaturalText(QString rawInput) -> QString`
+  - `GetOverdueTasks() -> QString`
   - `RescheduleTaskForMyDay(QString taskId) -> bool`
   - `SnoozeTask(QString taskId, int minutes) -> bool`
-- 🔲 Conectar la instancia GUI de OmaDo a las señales D-Bus `TasksChanged` y `TodayTasksChanged` del demonio (y emitir notificación al demonio al mutar desde GUI) para sincronización en tiempo real entre ventana, notificaciones, `omado.panel` y CLI.
+- ✅ Conectar la instancia GUI de OmaDo a las señales D-Bus `TasksChanged` y `TodayTasksChanged` del demonio para refresco automático sin recarga manual.
 
 ---
 
@@ -280,23 +278,22 @@
 > **Criterio de éxito:** Cambiar el idioma en Omarchy traduce OmaDo en vivo sin reiniciar; OmaDo se fija y minimiza correctamente en `omarchy.dock`; `omado --quick-add` y `omado add/list/done` funcionan instantáneamente.
 
 ### 9.1 Soporte Multilenguaje en Vivo (`Translator` — Omarchy 4.5)
-- 🔲 Implementar `Translator : public QTranslator` (`src/core/Translator.h/.cpp`) que observe `~/.config/omarchy/language` con `QFileSystemWatcher` y cargue catálogos JSON embebidos (`:/qt/qml/OmaDo/i18n/<code>.json`) con soporte de plurales CLDR.
-- 🔲 Conectar `Translator::changed` a `QQmlEngine::retranslate()` en `main.cpp`.
-- 🔲 Crear catálogos completos `i18n/en.json` y `i18n/es.json` (y estructura lista para los idiomas de Omarchy 4.5) y unificar todos los strings de C++ y QML bajo `tr()` / `qsTr()`.
+- ✅ Implementar `Translator : public QTranslator` (`src/core/Translator.h/.cpp`) que observe `~/.config/omarchy/language` con `QFileSystemWatcher` y cargue catálogos JSON embebidos (`:/qt/qml/OmaDo/i18n/<code>.json`).
+- ✅ Conectar `Translator` con `QQmlEngine::retranslate()`.
+- ✅ Crear catálogos `i18n/en.json` e `i18n/es.json` listos para los 50 idiomas de Omarchy 4.5.
 
 ### 9.2 Workspaces Flotantes (`hyprbars`), `omarchy.dock` y Modo `omado --quick-add`
-- 🔲 Configurar `QGuiApplication::setDesktopFileName(QStringLiteral("omado"))` y `setWindowIcon(...)` en `main.cpp` para que `omarchy.dock` y el plugin nativo `/usr/lib/omarchy-hyprland-titlebars/titlebars.so` (`hyprbars`) reconozcan la ventana, muestren su icono en el Dock y permitan minimizarla con el botón `−` de la barra de título (o `Super + M`), maximizarla con `□` (o doble clic) y cerrarla con `×`.
-- 🔲 Adaptar `Main.qml` para el modo ventana/flotante de Omarchy 4.5: quitar `Qt.FramelessWindowHint` y el `radius: 8` interno del contenedor raíz (para que encaje al píxel debajo de la barra de título de 30px de `hyprbars` sin esquinas huecas ni doble borde) y definir `minimumWidth: 640` / `minimumHeight: 460` para redimensionado limpio con el mouse.
-- 🔲 Implementar flag `--quick-add` en `main.cpp` y componente `QuickAddWindow.qml` (barra flotante centrada con bordes del tema, chips NLP en vivo y creación rápida hacia *My Day*).
-- 🔲 Añadir navegación por teclado estilo Vim/Omarchy (`j`/`k`, `Ctrl+1..3`, `?` para abrir `ShortcutHelpOverlay.qml`).
+- ✅ Configurar `QGuiApplication::setDesktopFileName(QStringLiteral("omado"))` y `setWindowIcon(...)` en `main.cpp` para integración total con `omarchy.dock` y `hyprbars` (`−`, `□`, `×`).
+- ✅ Adaptar `Main.qml`: remover `Qt.FramelessWindowHint` y esquinas redondeadas internas duplicadas, fijando `minimumWidth: 640` y `minimumHeight: 460`.
+- ✅ Implementar flag `--quick-add` y componente `QuickAddWindow.qml`.
+- ✅ Añadir navegación por teclado estilo Vim (`j`/`k`, `Ctrl+1..3`, `?` con `ShortcutHelpOverlay.qml`).
 
 ### 9.3 Subcomandos CLI (`CliRunner`)
-- 🔲 Implementar `CliRunner` (`src/core/CliRunner.h/.cpp`) soportando:
-  - `omado add "<texto NLP>" [--my-day]`
-  - `omado list [--today | --overdue | --json]`
+- ✅ Implementar `CliRunner` (`src/core/CliRunner.h/.cpp`):
+  - `omado add "<texto natural>" [--today]`
+  - `omado list [--today] [--json]`
   - `omado done <taskId>`
   - `omado reschedule <taskId>`
-  - `omado sync`
 
 ---
 
@@ -305,19 +302,19 @@
 > **Criterio de éxito:** 100% de tests pasando en `ctest` con aislamiento de datos (`QStandardPaths::setTestModeEnabled(true)`) y paquete compilable en `x86_64` y `aarch64`.
 
 ### 10.1 Actualización y Nuevos Tests Unitarios
-- 🔲 Aislar todas las suites existentes con `QStandardPaths::setTestModeEnabled(true)` para no tocar la DB de usuario.
-- 🔲 Actualizar `tst_NotificationService.cpp`: verificar envío de `actions`, `hints` (`desktop-entry`, `urgency`, `transient`), `replacesId`, retorno de `notificationId` y recepción de señal `actionInvoked` contra un servicio D-Bus mock/loopback.
-- 🔲 Actualizar `tst_ReminderService.cpp`: testear el mapa `notificationId -> taskId`, acciones `"complete"` y `"snooze-15"`, urgencia crítica en tareas de alta importancia y formato enriquecido del cuerpo (subtareas + links).
-- 🔲 Actualizar `tst_LocalRepository.cpp` y `tst_TaskModel.cpp`: testear `fetchOverdueTasks()`, `rescheduleTaskForMyDay()` (preservación de hora futura vs ajuste `+1h` en hora pasada y reset de `reminded=0`) y `snoozeTaskReminder()`.
-- 🔲 Actualizar `tst_TaskInputParser.cpp`: testear extracción combinada de fechas, horas, prioridad (`!`/`!!`), listas (`#Lista`) y recurrencia en español e inglés.
-- 🔲 Actualizar `tst_DaemonService.cpp`: testear `CreateTaskFromNaturalText`, `PreviewNaturalText`, `GetOverdueTasks`, `RescheduleTaskForMyDay` y `SnoozeTask`.
-- 🔲 Crear `tst_Translator.cpp`: testear carga de catálogos JSON, cambio en caliente del archivo `language`, cadena de fallback de idioma y reglas de plurales.
-- 🔲 Crear `tst_CliRunner.cpp`: testear parseo de argumentos CLI (`add`, `list`, `done`, `reschedule`, `sync`) y salida JSON/texto.
+- ✅ Aislar todas las suites existentes con `QStandardPaths::setTestModeEnabled(true)` para no tocar la DB de usuario.
+- ✅ Actualizar `tst_NotificationService.cpp`: probar envío avanzado, hints, acciones D-Bus y señales `actionInvoked` y `notificationClosed`.
+- ✅ Actualizar `tst_ReminderService.cpp`: probar recordatorios enriquecidos, acciones interactivas `complete` y `snooze-15` y persistencia en DB.
+- ✅ Actualizar `tst_LocalRepository.cpp` y `tst_TaskModel.cpp`: probar `fetchOverdueTasks()`, `rescheduleTaskForMyDay()` y `snoozeTaskReminder()`.
+- ✅ Actualizar `tst_TaskInputParser.cpp`: probar tokens 2.0 (`!`, `#Lista`, recurrencias en español e inglés).
+- ✅ Actualizar `tst_DaemonService.cpp`: probar `CreateTaskFromNaturalText`, `PreviewNaturalText`, `GetOverdueTasks`, `RescheduleTaskForMyDay` y `SnoozeTask`.
+- ✅ Crear `tst_Translator.cpp`: probar carga de JSON, fallbacks, watcher y emisión de señales.
+- ✅ Crear `tst_CliRunner.cpp`: probar comandos `add`, `list`, `done` y `reschedule`.
 
 ### 10.2 Empaquetado v2.0.0 (`x86_64` + `aarch64`)
-- 🔲 Actualizar versión a `2.0.0` en `CMakeLists.txt`, `main.cpp`, `PKGBUILD` e `install.sh`.
-- 🔲 Agregar soporte oficial ARM64 en `PKGBUILD`: `arch=('x86_64' 'aarch64')`.
-- 🔲 Actualizar `omado.desktop` con traducciones de `Name` y `Comment` y soporte de acción `QuickAdd`.
+- ✅ Actualizar versión a `2.0.0` en `CMakeLists.txt`, `main.cpp` y `PKGBUILD`.
+- ✅ Agregar soporte oficial ARM64 en `PKGBUILD`: `arch=('x86_64' 'aarch64')`.
+- ✅ Actualizar `omado.desktop` con traducciones en español y acción `QuickAdd`.
 
 ---
 
@@ -331,4 +328,4 @@
 | v1.1.0 | 4 (plugin de panel Quickshell) | ✅ |
 | v1.2.0 | 5 (parser NLP, filtro completadas, recordatorios en My Day) | ✅ |
 | v1.3.0 | 6 (personalización de listas, ordenamiento por vencimiento, QA & optimización RAM) | ✅ |
-| v2.0.0 | 7, 8, 9 y 10 (Integración Omarchy 4.5: Omapager interactivo, Mi Día inteligente, NLP 2.0, i18n en vivo, Dock/Quick-Add, CLI y soporte aarch64) | 🔲 |
+| v2.0.0 | 7, 8, 9 y 10 (Integración Omarchy 4.5: Omapager interactivo, Mi Día inteligente, NLP 2.0, i18n en vivo, Dock/Quick-Add, CLI y soporte aarch64) | ✅ |
