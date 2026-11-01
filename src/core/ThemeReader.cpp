@@ -12,7 +12,11 @@ ThemeReader::ThemeReader(QObject *parent) : QObject(parent) {
     m_debounceTimer.setInterval(50);
     connect(&m_debounceTimer, &QTimer::timeout, this, &ThemeReader::loadTheme);
 
-    QString themeDir = QDir::homePath() + "/.local/state/omarchy/current/theme";
+    QString stateHome = qEnvironmentVariable("XDG_STATE_HOME");
+    if (stateHome.trimmed().isEmpty()) {
+        stateHome = QDir::homePath() + "/.local/state";
+    }
+    QString themeDir = stateHome + "/omarchy/current/theme";
     m_themePath = themeDir + "/colors.toml";
     
     loadTheme();
@@ -85,6 +89,7 @@ void ThemeReader::loadTheme() {
                 else if ((key == "surface" || key == "lighter_background") && m_surface != color) { m_surface = color; changed = true; }
                 else if ((key == "border" || key == "muted") && m_border != color) { m_border = color; changed = true; }
                 else if ((key == "error" || key == "red") && m_error != color) { m_error = color; changed = true; }
+                else if ((key == "subtext" || key == "comment") && m_subtext != color) { m_subtext = color; changed = true; }
             }
         }
     }

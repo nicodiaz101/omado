@@ -127,11 +127,12 @@ Popup {
                         }
 
                         ToolTip {
+                            id: tip
                             visible: addArea.containsMouse
                             delay: 300
                             text: qsTr("Reschedule for My Day (Today)")
                             contentItem: Text {
-                                text: parent.text
+                                text: tip.text
                                 color: Theme.foreground
                                 font.family: "iA Writer Mono"
                                 font.pixelSize: 11

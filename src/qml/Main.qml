@@ -75,8 +75,15 @@ ApplicationWindow {
         }
     }
 
+    function isTextEntryFocused() {
+        if (!root.activeFocusItem) return false;
+        return (root.activeFocusItem.cursorPosition !== undefined) ||
+               (root.activeFocusItem.echoMode !== undefined);
+    }
+
     Shortcut {
         sequence: "Delete"
+        enabled: !root.isTextEntryFocused()
         onActivated: {
             if (TaskModel.selectedIndex >= 0) {
                 TaskModel.deleteTask(TaskModel.selectedIndex)
@@ -86,6 +93,7 @@ ApplicationWindow {
 
     Shortcut {
         sequence: "Space"
+        enabled: !root.isTextEntryFocused()
         onActivated: {
             if (TaskModel.selectedIndex >= 0) {
                 TaskModel.toggleTaskCompletion(TaskModel.selectedIndex)

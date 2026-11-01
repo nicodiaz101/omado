@@ -92,13 +92,13 @@ void ReminderService::checkReminders() {
         m_isChecking = false;
 
         for (const Task &task : pendingTasks) {
-            QString title = QStringLiteral("Recordatorio: ") + task.title;
+            QString title = tr("Reminder: ") + task.title;
             QString body = formatNotificationBody(task);
 
             // Acciones para Omarchy 4.5 / Omapager (pares: id, texto)
             QStringList actions;
-            actions << QStringLiteral("complete") << QStringLiteral("Completar")
-                    << QStringLiteral("snooze-15") << QStringLiteral("Posponer 15m");
+            actions << QStringLiteral("complete") << tr("Complete")
+                    << QStringLiteral("snooze-15") << tr("Snooze 15m");
 
             QVariantMap hints;
             hints.insert(QStringLiteral("desktop-entry"), QStringLiteral("omado"));
@@ -120,19 +120,19 @@ void ReminderService::checkReminders() {
             if (notificationId > 0) {
                 m_activeNotificationTasks.insert(notificationId, task.id);
                 qDebug() << "[ReminderService] Notificación ID" << notificationId << "enviada para tarea:" << task.id << task.title;
+
+                // Marcar tarea como recordada en SQLite solo si la notificación se envió
+                auto markFuture = m_repository->markReminded(task.id, true);
+                auto *markWatcher = new QFutureWatcher<bool>(this);
+                connect(markWatcher, &QFutureWatcher<bool>::finished, this, [markWatcher]() {
+                    markWatcher->deleteLater();
+                });
+                markWatcher->setFuture(markFuture);
+
+                emit reminderTriggered(task);
             } else {
                 qWarning() << "[ReminderService] No se pudo enviar notificación para tarea:" << task.id;
             }
-
-            // Marcar tarea como recordada en SQLite
-            auto markFuture = m_repository->markReminded(task.id, true);
-            auto *markWatcher = new QFutureWatcher<bool>(this);
-            connect(markWatcher, &QFutureWatcher<bool>::finished, this, [markWatcher]() {
-                markWatcher->deleteLater();
-            });
-            markWatcher->setFuture(markFuture);
-
-            emit reminderTriggered(task);
         }
     });
 

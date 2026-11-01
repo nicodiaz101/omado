@@ -2,10 +2,14 @@
 #include <qt6keychain/keychain.h>
 #include <QDebug>
 
-KeychainStore::KeychainStore(QObject *parent) : QObject(parent) {}
+KeychainStore::KeychainStore(QObject *parent)
+    : KeychainStore(QStringLiteral("io.omarchy.OmaDo"), parent) {}
+
+KeychainStore::KeychainStore(const QString &serviceName, QObject *parent)
+    : QObject(parent), m_serviceName(serviceName) {}
 
 void KeychainStore::writeKey(const QString &key, const QString &value, std::function<void(bool success, const QString &error)> callback) {
-    auto *job = new QKeychain::WritePasswordJob(QLatin1String(kServiceName), this);
+    auto *job = new QKeychain::WritePasswordJob(m_serviceName, this);
     job->setAutoDelete(true);
     job->setKey(key);
     job->setTextData(value);
@@ -22,7 +26,7 @@ void KeychainStore::writeKey(const QString &key, const QString &value, std::func
 }
 
 void KeychainStore::readKey(const QString &key, std::function<void(const QString &value, bool success)> callback) {
-    auto *job = new QKeychain::ReadPasswordJob(QLatin1String(kServiceName), this);
+    auto *job = new QKeychain::ReadPasswordJob(m_serviceName, this);
     job->setAutoDelete(true);
     job->setKey(key);
     
@@ -40,7 +44,7 @@ void KeychainStore::readKey(const QString &key, std::function<void(const QString
 }
 
 void KeychainStore::deleteKey(const QString &key, std::function<void(bool success)> callback) {
-    auto *job = new QKeychain::DeletePasswordJob(QLatin1String(kServiceName), this);
+    auto *job = new QKeychain::DeletePasswordJob(m_serviceName, this);
     job->setAutoDelete(true);
     job->setKey(key);
     

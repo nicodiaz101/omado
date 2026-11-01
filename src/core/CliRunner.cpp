@@ -7,6 +7,9 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QStandardPaths>
+#include <QtDBus/QDBusInterface>
+#include <QtDBus/QDBusReply>
 #include <iostream>
 
 int CliRunner::run(const QStringList &args, LocalRepository *repo) {
@@ -15,6 +18,18 @@ int CliRunner::run(const QStringList &args, LocalRepository *repo) {
     }
 
     QString subCmd = args.at(0).toLower();
+    bool useDBus = false;
+    std::unique_ptr<QDBusInterface> daemonIface;
+
+    if (!QStandardPaths::isTestModeEnabled()) {
+        daemonIface = std::make_unique<QDBusInterface>(
+            QStringLiteral("io.omarchy.OmaDo"),
+            QStringLiteral("/io/omarchy/OmaDo"),
+            QStringLiteral("io.omarchy.OmaDo"),
+            QDBusConnection::sessionBus()
+        );
+        useDBus = daemonIface->isValid();
+    }
 
     if (subCmd == QLatin1String("add")) {
         if (args.count() < 2) {
@@ -33,8 +48,18 @@ int CliRunner::run(const QStringList &args, LocalRepository *repo) {
         }
 
         QString rawInput = textParts.join(QLatin1Char(' '));
-        DaemonService daemon(repo);
-        QString taskId = daemon.CreateTaskFromNaturalText(rawInput, addToMyDay);
+        QString taskId;
+
+        if (useDBus) {
+            QDBusReply<QString> reply = daemonIface->call(QStringLiteral("CreateTaskFromNaturalText"), rawInput, addToMyDay);
+            if (reply.isValid()) {
+                taskId = reply.value();
+            }
+        }
+        if (taskId.isEmpty()) {
+            DaemonService daemon(repo);
+            taskId = daemon.CreateTaskFromNaturalText(rawInput, addToMyDay);
+        }
 
         if (!taskId.isEmpty()) {
             std::cout << "Tarea creada [" << taskId.toStdString() << "]" << std::endl;
@@ -47,9 +72,19 @@ int CliRunner::run(const QStringList &args, LocalRepository *repo) {
         bool jsonOutput = args.contains(QLatin1String("--json"));
         bool todayOnly = args.contains(QLatin1String("--today"));
 
-        DaemonService daemon(repo);
         if (todayOnly) {
-            QString jsonStr = daemon.GetTasksForToday();
+            QString jsonStr;
+            if (useDBus) {
+                QDBusReply<QString> reply = daemonIface->call(QStringLiteral("GetTasksForToday"));
+                if (reply.isValid()) {
+                    jsonStr = reply.value();
+                }
+            }
+            if (jsonStr.isEmpty()) {
+                DaemonService daemon(repo);
+                jsonStr = daemon.GetTasksForToday();
+            }
+
             if (jsonOutput) {
                 std::cout << jsonStr.toStdString() << std::endl;
             } else {
@@ -69,6 +104,7 @@ int CliRunner::run(const QStringList &args, LocalRepository *repo) {
             }
             return 0;
         } else {
+            DaemonService daemon(repo);
             auto lists = daemon.GetLists();
             if (jsonOutput) {
                 QJsonArray arr;
@@ -92,8 +128,18 @@ int CliRunner::run(const QStringList &args, LocalRepository *repo) {
             return 1;
         }
         QString taskId = args.at(1);
-        DaemonService daemon(repo);
-        bool ok = daemon.ToggleTask(taskId, true);
+        bool ok = false;
+        if (useDBus) {
+            QDBusReply<bool> reply = daemonIface->call(QStringLiteral("ToggleTask"), taskId, true);
+            if (reply.isValid()) {
+                ok = reply.value();
+            }
+        }
+        if (!ok) {
+            DaemonService daemon(repo);
+            ok = daemon.ToggleTask(taskId, true);
+        }
+
         if (ok) {
             std::cout << "Tarea completada: " << taskId.toStdString() << std::endl;
             return 0;
@@ -107,8 +153,18 @@ int CliRunner::run(const QStringList &args, LocalRepository *repo) {
             return 1;
         }
         QString taskId = args.at(1);
-        DaemonService daemon(repo);
-        bool ok = daemon.RescheduleTaskForMyDay(taskId);
+        bool ok = false;
+        if (useDBus) {
+            QDBusReply<bool> reply = daemonIface->call(QStringLiteral("RescheduleTaskForMyDay"), taskId);
+            if (reply.isValid()) {
+                ok = reply.value();
+            }
+        }
+        if (!ok) {
+            DaemonService daemon(repo);
+            ok = daemon.RescheduleTaskForMyDay(taskId);
+        }
+
         if (ok) {
             std::cout << "Tarea reprogramada para Mi Día: " << taskId.toStdString() << std::endl;
             return 0;

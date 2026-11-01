@@ -29,7 +29,7 @@ private slots:
     }
 
     void testClientIdConfiguration() {
-        KeychainStore keychain;
+        KeychainStore keychain(QStringLiteral("io.omarchy.OmaDo.Test"));
         AuthManager auth(&keychain);
         QCOMPARE(auth.clientId(), QStringLiteral("ae0de121-412b-438c-a604-6614b1d28ab3"));
 
@@ -38,13 +38,13 @@ private slots:
     }
 
     void testInitialState() {
-        KeychainStore keychain;
+        KeychainStore keychain(QStringLiteral("io.omarchy.OmaDo.Test"));
         AuthManager auth(&keychain);
         QCOMPARE(auth.isAuthenticating(), false);
     }
 
     void testLogoutCleansState() {
-        KeychainStore keychain;
+        KeychainStore keychain(QStringLiteral("io.omarchy.OmaDo.Test"));
         AuthManager auth(&keychain);
         auth.logout();
         QCOMPARE(auth.isAuthenticated(), false);

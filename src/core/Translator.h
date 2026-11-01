@@ -4,6 +4,7 @@
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QString>
+#include <QPointer>
 
 class QQmlEngine;
 
@@ -33,7 +34,7 @@ private:
     void loadTranslationsFromJson(const QString &langCode);
     QString detectSystemLanguage() const;
 
-    QQmlEngine *m_engine = nullptr;
+    QPointer<QQmlEngine> m_engine;
     QFileSystemWatcher m_watcher;
     QString m_configPath;
     QString m_currentLanguage;

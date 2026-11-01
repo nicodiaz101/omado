@@ -12,7 +12,11 @@ Translator::Translator(QQmlEngine *engine, QObject *parent)
     : QTranslator(parent)
     , m_engine(engine)
 {
-    QString configDir = QDir::homePath() + QStringLiteral("/.config/omarchy");
+    QString configHome = qEnvironmentVariable("XDG_CONFIG_HOME");
+    if (configHome.trimmed().isEmpty()) {
+        configHome = QDir::homePath() + QStringLiteral("/.config");
+    }
+    QString configDir = configHome + QStringLiteral("/omarchy");
     m_configPath = configDir + QStringLiteral("/language");
 
     // Observar directorio o archivo de configuración

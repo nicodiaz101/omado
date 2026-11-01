@@ -132,6 +132,7 @@ uint NotificationService::sendNotification(const QString &title,
         qWarning() << "[NotificationService] Interfaz D-Bus no válida:" << iface.lastError().message();
         return 0;
     }
+    iface.setTimeout(2000);
 
     // Asegurar que el desktop-entry apunte a omado para agrupación correcta en Omapager
     QVariantMap finalHints = hints;

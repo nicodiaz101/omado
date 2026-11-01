@@ -7,6 +7,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wall -Wextra)
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Sql DBus Concurrent)
 find_package(Qt6Keychain REQUIRED)
 
@@ -28,13 +32,12 @@ add_library(omado_lib STATIC
     src/core/CliRunner.cpp
 )
 
-file(GLOB OMADO_I18N_FILES "src/i18n/*.json")
-
 qt_add_resources(omado_lib "omado_i18n"
     PREFIX "/qt/qml/OmaDo/i18n"
     BASE "src/i18n"
     FILES
-        ${OMADO_I18N_FILES}
+        src/i18n/en.json
+        src/i18n/es.json
 )
 target_include_directories(omado_lib PUBLIC src/)
 target_link_libraries(omado_lib PUBLIC
@@ -76,11 +79,14 @@ qt_add_qml_module(omado
         icons/close.svg
         icons/eye.svg
         icons/eye-off.svg
+        icons/folder.svg
         icons/list.svg
         icons/omado.svg
         icons/plus.svg
         icons/repeat.svg
+        icons/sparkles.svg
         icons/star.svg
+        icons/star-filled.svg
         icons/steps.svg
         icons/sun.svg
         icons/tasks.svg
@@ -94,7 +100,6 @@ include(GNUInstallDirs)
 install(TARGETS omado RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES icons/omado.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 install(FILES omado.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES autostart/omado-daemon.desktop DESTINATION /etc/xdg/autostart OPTIONAL)
 install(FILES systemd/omado.service DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/user OPTIONAL)
 
 option(BUILD_TESTING "Build the testing tree." ON)

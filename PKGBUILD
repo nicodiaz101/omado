@@ -1,11 +1,11 @@
 # Maintainer: Nicolas Diaz <nico.d5155@outlook.com.ar>
 pkgname=omado-git
-pkgver=1.3.0.r30.68b434a
+pkgver=2.0.0.r0.0000000
 pkgrel=1
 pkgdesc="Ultra-lightweight native task manager with Microsoft To Do sync for Omarchy"
 arch=('x86_64' 'aarch64')
 url="https://github.com/nicodiaz101/omado"
-license=('GPL3')
+license=('GPL-3.0-or-later')
 depends=(
     'qt6-base'
     'qt6-declarative'
@@ -32,7 +32,8 @@ build() {
     cd "$srcdir/omado"
     cmake -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=/usr
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DBUILD_TESTING=OFF
     cmake --build build
 }
 

@@ -55,7 +55,6 @@ public:
 
     int overdueCount() const { return m_overdueTasks.count(); }
     QVariantList overdueSuggestions() const;
-    Q_INVOKABLE void loadOverdueSuggestions();
     Q_INVOKABLE void rescheduleForMyDay(const QString &taskId);
 
     bool hideCompleted() const { return m_hideCompleted; }
@@ -64,7 +63,12 @@ public:
     bool sortByDueDate() const { return m_sortByDueDate; }
     void setSortByDueDate(bool sort);
 
-    Q_INVOKABLE void loadTasks();
+public slots:
+    void loadTasks();
+    void loadOverdueSuggestions();
+
+public:
+    void resetPreservingSelection(const std::function<void()> &mutation = nullptr);
     Q_INVOKABLE QVariantMap parseInput(const QString &text) const;
     Q_INVOKABLE void addTask(const QString &title, const QString &dueDate = "", const QString &reminderAt = "", const QString &recurrence = "none");
     Q_INVOKABLE void addTaskWithSteps(const QString &title, const QString &dueDate, const QString &reminderAt, const QString &recurrence, const QStringList &steps);

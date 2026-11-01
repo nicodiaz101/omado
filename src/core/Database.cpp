@@ -29,6 +29,7 @@ bool Database::initialize() {
     
     // 3. Activar WAL mode y constrains de foreign keys
     executeSql("PRAGMA journal_mode=WAL;");
+    executeSql("PRAGMA synchronous=NORMAL;");
     executeSql("PRAGMA foreign_keys=ON;");
     executeSql("PRAGMA busy_timeout=5000;");
     executeSql("PRAGMA cache_size=-512;");
@@ -224,6 +225,32 @@ bool Database::applyMigrations() {
         } else {
             m_db.rollback();
             qWarning() << "[Database] Falló la migración v4";
+            return false;
+        }
+    }
+
+    if (currentVersion < 5) {
+        qDebug() << "[Database] Aplicando migración v5 (tracking de subtareas eliminadas)...";
+        m_db.transaction();
+
+        bool ok = executeSql(R"(
+            CREATE TABLE IF NOT EXISTS deleted_steps (
+                id              TEXT PRIMARY KEY,
+                task_id         TEXT,
+                remote_id       TEXT NOT NULL,
+                task_remote_id  TEXT NOT NULL,
+                list_remote_id  TEXT NOT NULL,
+                deleted_at      TEXT NOT NULL
+            );
+        )") && executeSql("CREATE INDEX IF NOT EXISTS idx_deleted_steps_task_remote_id ON deleted_steps(task_remote_id);");
+
+        if (ok) {
+            executeSql("INSERT INTO schema_version (version, applied_at) VALUES (5, datetime('now'))");
+            m_db.commit();
+            currentVersion = 5;
+        } else {
+            m_db.rollback();
+            qWarning() << "[Database] Falló la migración v5";
             return false;
         }
     }

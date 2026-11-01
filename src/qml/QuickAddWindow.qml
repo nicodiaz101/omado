@@ -59,7 +59,14 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46
 
+                onTaskAdded: {
+                    quickAddWindow.close()
+                }
+
                 Component.onCompleted: {
+                    if (!TaskModel.currentListId) {
+                        TaskModel.currentListId = "special-myday"
+                    }
                     inputBar.focusInput()
                 }
             }

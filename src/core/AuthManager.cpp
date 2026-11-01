@@ -11,6 +11,7 @@
 #include <QProcessEnvironment>
 #include <QUuid>
 #include <QTimer>
+#include <QPointer>
 #include <QDebug>
 
 AuthManager::AuthManager(KeychainStore *keychain, QObject *parent)
@@ -78,35 +79,42 @@ void AuthManager::checkSavedCredentials(std::function<void(bool success)> callba
         return;
     }
 
-    m_keychain->readKey(KeychainStore::kKeyRefreshToken, [this, callback](const QString &refreshToken, bool success) {
+    QPointer<AuthManager> guard(this);
+    m_keychain->readKey(KeychainStore::kKeyRefreshToken, [guard, callback](const QString &refreshToken, bool success) {
+        if (!guard) return;
         if (!success || refreshToken.trimmed().isEmpty()) {
-            m_isAuthenticated = false;
-            emit authStatusChanged();
+            guard->m_isAuthenticated = false;
+            emit guard->authStatusChanged();
             if (callback) callback(false);
             return;
         }
 
-        m_refreshToken = refreshToken;
-        m_isAuthenticated = true;
+        guard->m_refreshToken = refreshToken;
+        guard->m_isAuthenticated = true;
 
-        m_keychain->readKey(KeychainStore::kKeyAccessToken, [this](const QString &accessToken, bool okToken) {
-            if (okToken) m_accessToken = accessToken;
-        });
+        guard->m_keychain->readKey(KeychainStore::kKeyAccessToken, [guard, callback](const QString &accessToken, bool okToken) {
+            if (!guard) return;
+            if (okToken) guard->m_accessToken = accessToken;
 
-        m_keychain->readKey(KeychainStore::kKeyTokenExpiry, [this](const QString &expiryStr, bool okExpiry) {
-            if (okExpiry && !expiryStr.isEmpty()) {
-                m_tokenExpiry = QDateTime::fromString(expiryStr, Qt::ISODate);
-            }
-        });
+            guard->m_keychain->readKey(KeychainStore::kKeyTokenExpiry, [guard, callback](const QString &expiryStr, bool okExpiry) {
+                if (!guard) return;
+                if (okExpiry && !expiryStr.isEmpty()) {
+                    guard->m_tokenExpiry = QDateTime::fromString(expiryStr, Qt::ISODate);
+                }
 
-        m_keychain->readKey(KeychainStore::kKeyUserEmail, [this, callback](const QString &email, bool okEmail) {
-            if (okEmail) m_userEmail = email;
-            m_keychain->readKey(KeychainStore::kKeyUserName, [this, callback](const QString &name, bool okName) {
-                if (okName) m_userName = name;
-                emit userChanged();
-                emit authStatusChanged();
-                qDebug() << "[AuthManager] Sesión restaurada exitosamente";
-                if (callback) callback(true);
+                guard->m_keychain->readKey(KeychainStore::kKeyUserEmail, [guard, callback](const QString &email, bool okEmail) {
+                    if (!guard) return;
+                    if (okEmail) guard->m_userEmail = email;
+
+                    guard->m_keychain->readKey(KeychainStore::kKeyUserName, [guard, callback](const QString &name, bool okName) {
+                        if (!guard) return;
+                        if (okName) guard->m_userName = name;
+                        emit guard->userChanged();
+                        emit guard->authStatusChanged();
+                        qDebug() << "[AuthManager] Sesión restaurada exitosamente";
+                        if (callback) callback(true);
+                    });
+                });
             });
         });
     });
@@ -150,6 +158,20 @@ void AuthManager::startLogin() {
     m_isAuthenticating = true;
     emit authStatusChanged();
 
+    m_oauthTimeoutTimer = new QTimer(this);
+    m_oauthTimeoutTimer->setSingleShot(true);
+    m_oauthTimeoutTimer->setInterval(120000);
+    connect(m_oauthTimeoutTimer, &QTimer::timeout, this, [this]() {
+        if (m_isAuthenticating) {
+            qWarning() << "[AuthManager] Timeout de login excedido (120s)";
+            stopLocalServer();
+            m_isAuthenticating = false;
+            emit authStatusChanged();
+            emit authFailed("Timeout esperando autorización del navegador");
+        }
+    });
+    m_oauthTimeoutTimer->start();
+
     qDebug() << "[AuthManager] Abriendo navegador para login con Client ID:" << m_clientId;
     QDesktopServices::openUrl(url);
 }
@@ -166,6 +188,13 @@ void AuthManager::handleNewConnection() {
 
         QString firstLine = request.split("\r\n").value(0);
         QString path = firstLine.split(" ").value(1);
+
+        if (path.startsWith("/favicon.ico")) {
+            socket->write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+            socket->flush();
+            socket->disconnectFromHost();
+            return;
+        }
 
         QUrl callbackUrl("http://localhost" + path);
         QUrlQuery query(callbackUrl);
@@ -318,6 +347,27 @@ void AuthManager::refreshAccessToken(std::function<void(bool success)> callback)
         return;
     }
 
+    if (m_isRefreshingToken) {
+        if (callback) {
+            m_refreshWaiters.append(callback);
+        }
+        return;
+    }
+
+    m_isRefreshingToken = true;
+    if (callback) {
+        m_refreshWaiters.append(callback);
+    }
+
+    auto notifyWaiters = [this](bool success) {
+        m_isRefreshingToken = false;
+        auto waiters = m_refreshWaiters;
+        m_refreshWaiters.clear();
+        for (const auto &cb : waiters) {
+            if (cb) cb(success);
+        }
+    };
+
     QNetworkRequest req(QUrl(QString::fromLatin1(kTokenEndpoint)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
@@ -326,31 +376,34 @@ void AuthManager::refreshAccessToken(std::function<void(bool success)> callback)
     body.addQueryItem("grant_type", "refresh_token");
     body.addQueryItem("refresh_token", m_refreshToken);
 
+    QPointer<AuthManager> guard(this);
     QNetworkReply *reply = networkAccessManager()->post(req, body.toString(QUrl::FullyEncoded).toUtf8());
-    connect(reply, &QNetworkReply::finished, this, [this, reply, callback]() {
+    connect(reply, &QNetworkReply::finished, this, [guard, reply, notifyWaiters]() {
         reply->deleteLater();
+        if (!guard) return;
+
         if (reply->error() != QNetworkReply::NoError) {
             qWarning() << "[AuthManager] Error refrescando token:" << reply->errorString();
-            if (callback) callback(false);
+            notifyWaiters(false);
             return;
         }
 
         QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
-        m_accessToken = obj.value("access_token").toString();
+        guard->m_accessToken = obj.value("access_token").toString();
         if (obj.contains("refresh_token")) {
-            m_refreshToken = obj.value("refresh_token").toString();
+            guard->m_refreshToken = obj.value("refresh_token").toString();
         }
         int expiresIn = obj.value("expires_in").toInt(3600);
-        m_tokenExpiry = QDateTime::currentDateTime().addSecs(expiresIn - 60);
+        guard->m_tokenExpiry = QDateTime::currentDateTime().addSecs(expiresIn - 60);
 
-        if (m_keychain) {
-            m_keychain->writeKey(KeychainStore::kKeyAccessToken, m_accessToken);
-            m_keychain->writeKey(KeychainStore::kKeyRefreshToken, m_refreshToken);
-            m_keychain->writeKey(KeychainStore::kKeyTokenExpiry, m_tokenExpiry.toString(Qt::ISODate));
+        if (guard->m_keychain) {
+            guard->m_keychain->writeKey(KeychainStore::kKeyAccessToken, guard->m_accessToken);
+            guard->m_keychain->writeKey(KeychainStore::kKeyRefreshToken, guard->m_refreshToken);
+            guard->m_keychain->writeKey(KeychainStore::kKeyTokenExpiry, guard->m_tokenExpiry.toString(Qt::ISODate));
         }
 
         qDebug() << "[AuthManager] Access token refrescado con éxito";
-        if (callback) callback(true);
+        notifyWaiters(true);
     });
 }
 
@@ -404,6 +457,11 @@ void AuthManager::logout() {
 }
 
 void AuthManager::stopLocalServer() {
+    if (m_oauthTimeoutTimer) {
+        m_oauthTimeoutTimer->stop();
+        m_oauthTimeoutTimer->deleteLater();
+        m_oauthTimeoutTimer = nullptr;
+    }
     if (m_server) {
         if (m_server->isListening()) {
             m_server->close();

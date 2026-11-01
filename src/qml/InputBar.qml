@@ -16,6 +16,8 @@ Rectangle {
     property var draftSteps: []
     property var parsedDraft: null
 
+    signal taskAdded()
+
     Timer {
         id: parseDebounceTimer
         interval: 100
@@ -91,6 +93,7 @@ Rectangle {
                     root.draftRecurrence = "none"
                     root.draftSteps = []
                     draftStepsPopup.draftSteps = []
+                    root.taskAdded()
                 }
             }
         }

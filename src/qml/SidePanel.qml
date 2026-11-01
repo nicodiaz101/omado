@@ -524,13 +524,13 @@ Rectangle {
                             AppIcon {
                                 name: "close"
                                 size: 14
-                                color: "#ff5555"
+                                color: Theme.error
                             }
 
                             Text {
                                 Layout.fillWidth: true
                                 text: qsTr("Log out")
-                                color: "#ff5555"
+                                color: Theme.error
                                 font.family: "iA Writer Mono"
                                 font.pixelSize: 12
                             }

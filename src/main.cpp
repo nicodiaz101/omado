@@ -16,6 +16,8 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QFontDatabase>
+#include <QCommandLineParser>
+#include <QCommandLineOption>
 #include <QIcon>
 #include <QtDBus/QDBusConnection>
 #include <QDebug>
@@ -35,6 +37,19 @@ int main(int argc, char *argv[])
             isQuickAdd = true;
         } else if (arg == "--version" || arg == "-v") {
             QTextStream(stdout) << "OmaDo v2.0.0 (Omarchy 4.5)" << Qt::endl;
+            return 0;
+        } else if (arg == "--help" || arg == "-h") {
+            QTextStream(stdout) << "Uso: omado [opciones] [comando]\n\n"
+                                << "Opciones:\n"
+                                << "  -d, --daemon     Ejecutar como daemon en segundo plano\n"
+                                << "  --quick-add      Abrir ventana flotante de creación rápida\n"
+                                << "  -v, --version    Mostrar versión\n"
+                                << "  -h, --help       Mostrar esta ayuda\n\n"
+                                << "Comandos CLI:\n"
+                                << "  add \"<texto>\" [--today]   Crear tarea con lenguaje natural\n"
+                                << "  list [--today] [--json]     Listar tareas o listas\n"
+                                << "  done <task-id>              Marcar tarea como completada\n"
+                                << "  reschedule <task-id>        Reprogramar tarea para Mi Día\n";
             return 0;
         } else if (!arg.startsWith("-")) {
             // Comandos CLI (add, list, done, reschedule)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-VERSION="1.3"
+VERSION="2.0.0"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'

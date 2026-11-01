@@ -352,6 +352,50 @@ private slots:
         m_repo->deleteTask(created.id).result();
         m_repo->deleteList(list.id).result();
     }
+
+    void testSubtaskRemoteSync() {
+        TaskList list = m_repo->createList("Lista Subtask Sync").result();
+        m_repo->updateListRemoteId(list.id, "remote-list-xyz").result();
+
+        Task t;
+        t.listId = list.id;
+        t.title = "Tarea Sync Steps";
+        Task createdTask = m_repo->createTask(t).result();
+        m_repo->updateTaskRemoteId(createdTask.id, "remote-task-123").result();
+
+        // 1. Upsert remote step
+        TaskStep rStep;
+        rStep.remoteId = "remote-step-abc";
+        rStep.title = "Paso Remoto Inicial";
+        rStep.isCompleted = false;
+        TaskStep upserted = m_repo->upsertRemoteStep(createdTask.id, rStep).result();
+        QCOMPARE(upserted.remoteId, QStringLiteral("remote-step-abc"));
+        QCOMPARE(upserted.title, QStringLiteral("Paso Remoto Inicial"));
+
+        // 2. Fetch steps for task
+        QList<TaskStep> steps = m_repo->fetchStepsForTask(createdTask.id).result();
+        QCOMPARE(steps.size(), 1);
+        QCOMPARE(steps[0].remoteId, QStringLiteral("remote-step-abc"));
+
+        // 3. Delete step with tracking
+        bool delOk = m_repo->deleteStep(upserted.id, true).result();
+        QVERIFY(delOk);
+
+        // 4. Verify deleted steps
+        auto delSteps = m_repo->fetchDeletedSteps().result();
+        bool foundDel = false;
+        for (const auto &ds : delSteps) {
+            if (ds.remoteId == "remote-step-abc") {
+                foundDel = true;
+                m_repo->removeDeletedStepRecord(ds.id).result();
+                break;
+            }
+        }
+        QVERIFY(foundDel);
+
+        m_repo->deleteTask(createdTask.id, false).result();
+        m_repo->deleteList(list.id).result();
+    }
 };
 
 QTEST_MAIN(tst_LocalRepository)

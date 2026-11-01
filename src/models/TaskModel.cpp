@@ -1,4 +1,5 @@
 #include "TaskModel.h"
+#include "TaskListModel.h"
 #include "GraphClient.h"
 #include "../core/SyncEngine.h"
 #include "../core/TaskInputParser.h"
@@ -85,14 +86,9 @@ TaskModel::TaskModel(LocalRepository *repo, GraphClient *graph, SyncEngine *sync
     m_sortByDueDate = settings.value("ui/sortByDueDate", false).toBool();
 
     connect(&m_watcher, &QFutureWatcher<QList<Task>>::finished, this, [this]() {
-        beginResetModel();
-        m_tasks = m_watcher.result();
-        rebuildVisibleIndices();
-        m_selectedIndex = -1;
-        endResetModel();
-        emit selectedIndexChanged();
-        emit selectedTaskChanged();
-        emit countChanged();
+        resetPreservingSelection([this]() {
+            m_tasks = m_watcher.result();
+        });
     });
 
     connect(&m_overdueWatcher, &QFutureWatcher<QList<Task>>::finished, this, [this]() {
@@ -100,6 +96,36 @@ TaskModel::TaskModel(LocalRepository *repo, GraphClient *graph, SyncEngine *sync
         emit overdueCountChanged();
         emit overdueSuggestionsChanged();
     });
+}
+
+void TaskModel::resetPreservingSelection(const std::function<void()> &mutation) {
+    QString selId;
+    int actIdx = actualIndex(m_selectedIndex);
+    if (actIdx >= 0 && actIdx < m_tasks.count()) {
+        selId = m_tasks[actIdx].id;
+    }
+
+    beginResetModel();
+    if (mutation) {
+        mutation();
+    }
+    rebuildVisibleIndices();
+
+    int newSel = -1;
+    if (!selId.isEmpty()) {
+        for (int i = 0; i < m_visibleIndices.count(); ++i) {
+            if (m_tasks[m_visibleIndices[i]].id == selId) {
+                newSel = i;
+                break;
+            }
+        }
+    }
+    m_selectedIndex = newSel;
+    endResetModel();
+
+    emit selectedIndexChanged();
+    emit selectedTaskChanged();
+    emit countChanged();
 }
 
 void TaskModel::rebuildVisibleIndices() {
@@ -130,32 +156,10 @@ void TaskModel::setHideCompleted(bool hide) {
     QSettings settings("omacom-io", "OmaDo");
     settings.setValue("ui/hideCompleted", hide);
 
-    QString selId;
-    int actIdx = actualIndex(m_selectedIndex);
-    if (actIdx >= 0 && actIdx < m_tasks.count()) {
-        selId = m_tasks[actIdx].id;
-    }
-
-    beginResetModel();
-    m_hideCompleted = hide;
-    rebuildVisibleIndices();
-    if (!selId.isEmpty()) {
-        m_selectedIndex = -1;
-        for (int i = 0; i < m_visibleIndices.count(); ++i) {
-            if (m_tasks[m_visibleIndices[i]].id == selId) {
-                m_selectedIndex = i;
-                break;
-            }
-        }
-    } else {
-        m_selectedIndex = -1;
-    }
-    endResetModel();
-
+    resetPreservingSelection([this, hide]() {
+        m_hideCompleted = hide;
+    });
     emit hideCompletedChanged();
-    emit selectedIndexChanged();
-    emit selectedTaskChanged();
-    emit countChanged();
 }
 
 void TaskModel::setSortByDueDate(bool sort) {
@@ -164,32 +168,10 @@ void TaskModel::setSortByDueDate(bool sort) {
     QSettings settings("omacom-io", "OmaDo");
     settings.setValue("ui/sortByDueDate", sort);
 
-    QString selId;
-    int actIdx = actualIndex(m_selectedIndex);
-    if (actIdx >= 0 && actIdx < m_tasks.count()) {
-        selId = m_tasks[actIdx].id;
-    }
-
-    beginResetModel();
-    m_sortByDueDate = sort;
-    rebuildVisibleIndices();
-    if (!selId.isEmpty()) {
-        m_selectedIndex = -1;
-        for (int i = 0; i < m_visibleIndices.count(); ++i) {
-            if (m_tasks[m_visibleIndices[i]].id == selId) {
-                m_selectedIndex = i;
-                break;
-            }
-        }
-    } else {
-        m_selectedIndex = -1;
-    }
-    endResetModel();
-
+    resetPreservingSelection([this, sort]() {
+        m_sortByDueDate = sort;
+    });
     emit sortByDueDateChanged();
-    emit selectedIndexChanged();
-    emit selectedTaskChanged();
-    emit countChanged();
 }
 
 void TaskModel::setCurrentListId(const QString &id) {
@@ -404,11 +386,12 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
     QString finalReminderAt = reminderAt;
     QString finalRecurrence = recurrence.isEmpty() ? QStringLiteral("none") : recurrence;
     QString finalImportance = QStringLiteral("normal");
+    QString targetListId;
 
     // Solo parsear lenguaje natural si no se pasaron dueDate o reminderAt explícitamente
     if (finalDueDate.isEmpty() && finalReminderAt.isEmpty()) {
         auto parsed = TaskInputParser::parse(finalTitle);
-        if (parsed.hasDueDate || parsed.hasReminder || parsed.hasImportance || parsed.hasRecurrence) {
+        if (parsed.hasDueDate || parsed.hasReminder || parsed.hasImportance || parsed.hasRecurrence || parsed.hasTargetList) {
             finalTitle = parsed.cleanTitle;
             if (parsed.hasDueDate) {
                 finalDueDate = parsed.dueDate.toString(Qt::ISODate);
@@ -421,6 +404,19 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
             }
             if (parsed.hasImportance) {
                 finalImportance = parsed.importance;
+            }
+            if (parsed.hasTargetList && !parsed.targetListName.isEmpty() && m_repo) {
+                auto listFuture = m_repo->fetchLists();
+                QList<TaskList> allLists = listFuture.result();
+                for (const auto &l : allLists) {
+                    QString emoji, name;
+                    TaskListModel::parseDisplayName(l.displayName, emoji, name);
+                    if (name.compare(parsed.targetListName, Qt::CaseInsensitive) == 0 ||
+                        l.displayName.compare(parsed.targetListName, Qt::CaseInsensitive) == 0) {
+                        targetListId = l.id;
+                        break;
+                    }
+                }
             }
         }
     }
@@ -441,7 +437,9 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
         t.reminderAt = parseDateTimeLocal(finalReminderAt);
     }
 
-    if (m_currentListId == "special-myday") {
+    if (!targetListId.isEmpty()) {
+        t.listId = targetListId;
+    } else if (m_currentListId == "special-myday") {
         t.listId = "default-tasks";
         t.isMyDay = true;
     } else if (m_currentListId == "special-schedule") {
@@ -803,7 +801,10 @@ void TaskModel::addStep(int row, const QString &stepTitle) {
 
     m_tasks[actIdx].steps.append(s);
     notifyRowChanged(row);
-    m_repo->addStep(s.taskId, s.title);
+    m_repo->addStep(s);
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::toggleStep(int row, int stepIndex) {
@@ -814,6 +815,9 @@ void TaskModel::toggleStep(int row, int stepIndex) {
     m_tasks[actIdx].steps[stepIndex].isCompleted = !m_tasks[actIdx].steps[stepIndex].isCompleted;
     notifyRowChanged(row);
     m_repo->updateStep(m_tasks[actIdx].steps[stepIndex]);
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }
 
 void TaskModel::deleteStep(int row, int stepIndex) {
@@ -825,4 +829,7 @@ void TaskModel::deleteStep(int row, int stepIndex) {
     m_tasks[actIdx].steps.removeAt(stepIndex);
     notifyRowChanged(row);
     m_repo->deleteStep(stepId);
+    if (m_sync) {
+        m_sync->scheduleSync(800);
+    }
 }

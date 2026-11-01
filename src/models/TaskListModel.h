@@ -30,7 +30,10 @@ public:
 
     static void parseDisplayName(const QString &raw, QString &outEmoji, QString &outCleanName);
 
-    Q_INVOKABLE void loadLists();
+public slots:
+    void loadLists();
+
+public:
     Q_INVOKABLE void createList(const QString &name, const QString &icon = QString());
     Q_INVOKABLE void renameList(const QString &id, const QString &newName);
     Q_INVOKABLE void setListIcon(const QString &id, const QString &emoji);
