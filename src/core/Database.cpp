@@ -9,9 +9,10 @@ Database::Database(QObject *parent) : QObject(parent) {
 }
 
 bool Database::initialize() {
-    // 1. Asegurar que el directorio exista
+    // 1. Asegurar que el directorio exista y tenga permisos restringidos (0700)
     QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QDir().mkpath(dataDir);
+    QFile::setPermissions(dataDir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     QString dbPath = dataDir + "/omado.db";
     
     // 2. Configurar la conexión
@@ -26,6 +27,9 @@ bool Database::initialize() {
         qWarning() << "[Database] No se pudo abrir la base de datos:" << m_db.lastError().text();
         return false;
     }
+
+    // Asegurar permisos estrictos en el archivo SQLite (0600)
+    QFile::setPermissions(dbPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     
     // 3. Activar WAL mode y constrains de foreign keys
     executeSql("PRAGMA journal_mode=WAL;");
@@ -103,7 +107,9 @@ bool Database::applyMigrations() {
                 title           TEXT NOT NULL,
                 is_completed    INTEGER NOT NULL DEFAULT 0,
                 sort_order      INTEGER NOT NULL DEFAULT 0,
-                remote_id       TEXT
+                remote_id       TEXT,
+                updated_at      TEXT,
+                synced_at       TEXT
             )
         )");
 
@@ -254,7 +260,54 @@ bool Database::applyMigrations() {
             return false;
         }
     }
+
+    if (currentVersion < 6) {
+        qDebug() << "[Database] Aplicando migración v6 (tracking de subtareas y sincronización granular)...";
+        m_db.transaction();
+
+        bool hasUpdatedAt = false;
+        bool hasSyncedAt = false;
+        QSqlQuery infoQuery(m_db);
+        if (infoQuery.exec("PRAGMA table_info(task_steps)")) {
+            while (infoQuery.next()) {
+                QString colName = infoQuery.value("name").toString();
+                if (colName == "updated_at") hasUpdatedAt = true;
+                if (colName == "synced_at") hasSyncedAt = true;
+            }
+        }
+
+        bool ok = true;
+        if (!hasUpdatedAt) {
+            ok = ok && executeSql("ALTER TABLE task_steps ADD COLUMN updated_at TEXT;");
+        }
+        if (!hasSyncedAt) {
+            ok = ok && executeSql("ALTER TABLE task_steps ADD COLUMN synced_at TEXT;");
+        }
+
+        if (ok) {
+            executeSql("UPDATE task_steps SET updated_at = datetime('now') WHERE updated_at IS NULL;");
+            executeSql("UPDATE task_steps SET synced_at = datetime('now') WHERE remote_id IS NOT NULL AND synced_at IS NULL;");
+            executeSql("CREATE INDEX IF NOT EXISTS idx_task_steps_remote_id ON task_steps(remote_id);");
+            executeSql("INSERT INTO schema_version (version, applied_at) VALUES (6, datetime('now'))");
+            m_db.commit();
+            currentVersion = 6;
+        } else {
+            m_db.rollback();
+            qWarning() << "[Database] Falló la migración v6";
+            return false;
+        }
+    }
     
+    // Asegurar que las listas especiales y la lista default-tasks siempre existan
+    executeSql(R"(
+        INSERT OR IGNORE INTO task_lists (id, display_name, is_special, sort_order, created_at)
+        VALUES
+          ('special-myday',    'My Day',   1, 0, datetime('now')),
+          ('special-schedule', 'Schedule', 1, 1, datetime('now')),
+          ('special-tasks',    'Tasks',    1, 2, datetime('now')),
+          ('default-tasks',    'Tasks',    0, 3, datetime('now'));
+    )");
+
     qDebug() << "[Database] Schema actualizado a versión:" << currentVersion;
     return true;
 }

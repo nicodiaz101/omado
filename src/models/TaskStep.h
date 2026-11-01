@@ -9,6 +9,8 @@ struct TaskStep {
     bool    isCompleted = false;
     int     sortOrder   = 0;
     QString remoteId;
+    QString updatedAt;
+    QString syncedAt;
 
     QVariantMap toVariantMap() const {
         return {
@@ -17,7 +19,9 @@ struct TaskStep {
             {QStringLiteral("title"), title},
             {QStringLiteral("isCompleted"), isCompleted},
             {QStringLiteral("sortOrder"), sortOrder},
-            {QStringLiteral("remoteId"), remoteId}
+            {QStringLiteral("remoteId"), remoteId},
+            {QStringLiteral("updatedAt"), updatedAt},
+            {QStringLiteral("syncedAt"), syncedAt}
         };
     }
 };

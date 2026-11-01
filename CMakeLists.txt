@@ -8,7 +8,9 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    add_compile_options(-Wall -Wextra)
+    add_compile_options(-Wall -Wextra -fstack-protector-strong -Wformat -Wformat-security)
+    add_compile_definitions(_FORTIFY_SOURCE=2)
+    add_link_options(-Wl,-z,relro -Wl,-z,now)
 endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Sql DBus Concurrent)
@@ -101,6 +103,7 @@ install(TARGETS omado RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES icons/omado.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 install(FILES omado.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES systemd/omado.service DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/user OPTIONAL)
+install(FILES io.omarchy.OmaDo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/interfaces OPTIONAL)
 
 option(BUILD_TESTING "Build the testing tree." ON)
 if(BUILD_TESTING)

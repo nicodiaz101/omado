@@ -182,13 +182,31 @@ void AuthManager::handleNewConnection() {
     QTcpSocket *socket = m_server->nextPendingConnection();
     if (!socket) return;
 
-    connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
-        QByteArray data = socket->readAll();
-        QString request = QString::fromUtf8(data);
+    auto buffer = std::make_shared<QByteArray>();
+    connect(socket, &QTcpSocket::readyRead, this, [this, socket, buffer]() {
+        buffer->append(socket->readAll());
+        if (buffer->size() > 8192) {
+            socket->write("HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n");
+            socket->flush();
+            socket->disconnectFromHost();
+            return;
+        }
 
+        if (!buffer->contains("\r\n\r\n")) {
+            return; // Esperar a que la cabecera HTTP esté completa
+        }
+
+        QString request = QString::fromUtf8(*buffer);
         QString firstLine = request.split("\r\n").value(0);
-        QString path = firstLine.split(" ").value(1);
+        QStringList parts = firstLine.split(" ");
+        if (parts.size() < 2 || parts.value(0) != "GET") {
+            socket->write("HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n");
+            socket->flush();
+            socket->disconnectFromHost();
+            return;
+        }
 
+        QString path = parts.value(1);
         if (path.startsWith("/favicon.ico")) {
             socket->write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
             socket->flush();
@@ -204,10 +222,12 @@ void AuthManager::handleNewConnection() {
         QString errorDesc = query.queryItemValue("error_description");
         QString state = query.queryItemValue("state");
 
-        if (state != m_state || m_state.isEmpty()) {
-            error = "invalid_state";
-            errorDesc = "El parámetro state no coincide o es inválido. Posible ataque CSRF.";
-            code.clear();
+        if (state.isEmpty() || state != m_state || m_state.isEmpty()) {
+            // Solicitud no esperada o state no coincide - rechazar pero NO cancelar el login general
+            socket->write("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nInvalid state or unexpected request\r\n");
+            socket->flush();
+            socket->disconnectFromHost();
+            return;
         }
 
         QString responseHtml = QStringLiteral(
@@ -286,11 +306,28 @@ void AuthManager::exchangeCodeForTokens(const QString &code, const QString &redi
             return;
         }
 
-        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-        QJsonObject obj = doc.object();
+        QJsonParseError parseErr;
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &parseErr);
+        if (parseErr.error != QJsonParseError::NoError || !doc.isObject()) {
+            qWarning() << "[AuthManager] Respuesta de tokens JSON inválida";
+            emit authStatusChanged();
+            emit authFailed(QStringLiteral("Respuesta de tokens JSON inválida"));
+            return;
+        }
 
+        QJsonObject obj = doc.object();
         m_accessToken = obj.value("access_token").toString();
         m_refreshToken = obj.value("refresh_token").toString();
+        QString tokenType = obj.value("token_type").toString();
+
+        if (m_accessToken.isEmpty() || tokenType.compare(QLatin1String("Bearer"), Qt::CaseInsensitive) != 0) {
+            QString errStr = obj.value("error_description").toString(obj.value("error").toString());
+            qWarning() << "[AuthManager] Token no recibido o tipo no soportado:" << errStr;
+            emit authStatusChanged();
+            emit authFailed(errStr.isEmpty() ? QStringLiteral("No se recibió access_token válido") : errStr);
+            return;
+        }
+
         int expiresIn = obj.value("expires_in").toInt(3600);
         m_tokenExpiry = QDateTime::currentDateTime().addSecs(expiresIn - 60);
 
@@ -337,7 +374,7 @@ void AuthManager::fetchUserProfile() {
 
         emit userChanged();
         emit authSuccess();
-        qDebug() << "[AuthManager] Autenticación completada para:" << m_userName << "<" << m_userEmail << ">";
+        qDebug() << "[AuthManager] Autenticación completada exitosamente";
     });
 }
 
@@ -388,8 +425,31 @@ void AuthManager::refreshAccessToken(std::function<void(bool success)> callback)
             return;
         }
 
-        QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
-        guard->m_accessToken = obj.value("access_token").toString();
+        QJsonParseError parseErr;
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &parseErr);
+        if (parseErr.error != QJsonParseError::NoError || !doc.isObject()) {
+            qWarning() << "[AuthManager] Respuesta de refresco de tokens inválida";
+            notifyWaiters(false);
+            return;
+        }
+
+        QJsonObject obj = doc.object();
+        QString errCode = obj.value("error").toString();
+        if (errCode == QLatin1String("invalid_grant")) {
+            qWarning() << "[AuthManager] Refresh token inválido o revocado (invalid_grant). Cerrando sesión...";
+            guard->logout();
+            notifyWaiters(false);
+            return;
+        }
+
+        QString newAccessToken = obj.value("access_token").toString();
+        if (newAccessToken.isEmpty()) {
+            qWarning() << "[AuthManager] No se recibió access_token en refresco:" << obj.value("error_description").toString();
+            notifyWaiters(false);
+            return;
+        }
+
+        guard->m_accessToken = newAccessToken;
         if (obj.contains("refresh_token")) {
             guard->m_refreshToken = obj.value("refresh_token").toString();
         }

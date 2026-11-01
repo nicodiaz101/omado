@@ -47,16 +47,16 @@ QString ReminderService::formatNotificationBody(const Task &task) const {
     QStringList sections;
 
     if (!task.body.trimmed().isEmpty()) {
-        sections.append(task.body.trimmed());
+        sections.append(task.body.trimmed().toHtmlEscaped());
     }
 
-    // Agregar hasta 3 subtareas pendientes si existen
+    // Agregar hasta 3 subtareas pendientes si existen (escapadas para evitar inyección de marcado HTML)
     QStringList pendingSteps;
     int count = 0;
     for (const TaskStep &step : task.steps) {
         if (!step.isCompleted) {
             if (count < 3) {
-                pendingSteps.append(QStringLiteral("• ") + step.title);
+                pendingSteps.append(QStringLiteral("• ") + step.title.toHtmlEscaped());
             }
             count++;
         }
@@ -92,7 +92,7 @@ void ReminderService::checkReminders() {
         m_isChecking = false;
 
         for (const Task &task : pendingTasks) {
-            QString title = tr("Reminder: ") + task.title;
+            QString title = tr("Reminder: ") + task.title.toHtmlEscaped();
             QString body = formatNotificationBody(task);
 
             // Acciones para Omarchy 4.5 / Omapager (pares: id, texto)

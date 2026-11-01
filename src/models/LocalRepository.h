@@ -73,6 +73,7 @@ public:
 
     // Subtasks remote sync
     QFuture<bool> updateStepRemoteId(const QString &stepId, const QString &remoteId);
+    QFuture<bool> markStepSynced(const QString &stepId);
     QFuture<TaskStep> upsertRemoteStep(const QString &taskId, const TaskStep &step);
     QFuture<bool> deleteStepByRemoteId(const QString &taskId, const QString &remoteStepId);
     QFuture<QList<DeletedStepRecord>> fetchDeletedSteps();

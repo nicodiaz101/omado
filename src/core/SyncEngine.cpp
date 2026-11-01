@@ -275,6 +275,7 @@ void SyncEngine::syncTasksForList(const QString &localListId, const QString &rem
         }
 
         QSet<QString> remoteTaskIds;
+        QMap<QString, QJsonArray> remoteChecklistItemsMap;
 
         // Descargar e insertar/actualizar tareas remotas en SQLite
         for (const auto &val : remoteTasks) {
@@ -286,6 +287,15 @@ void SyncEngine::syncTasksForList(const QString &localListId, const QString &rem
             t.title = obj.value("title").toString();
             t.isCompleted = (obj.value("status").toString() == "completed");
             t.importance = obj.value("importance").toString("normal");
+
+            QString modStr = obj.value("lastModifiedDateTime").toString();
+            if (!modStr.isEmpty()) {
+                t.updatedAt = QDateTime::fromString(modStr, Qt::ISODate);
+            }
+
+            if (obj.contains("checklistItems")) {
+                remoteChecklistItemsMap.insert(t.remoteId, obj.value("checklistItems").toArray());
+            }
 
             QJsonObject bodyObj = obj.value("body").toObject();
             t.body = bodyObj.value("content").toString();
@@ -337,7 +347,7 @@ void SyncEngine::syncTasksForList(const QString &localListId, const QString &rem
         // 2. Procesar tareas locales
         auto futureTasks = m_repo->fetchTasks(localListId);
         auto *watcher = new QFutureWatcher<QList<Task>>(this);
-        connect(watcher, &QFutureWatcher<QList<Task>>::finished, this, [this, watcher, localListId, remoteListId, remoteTaskIds, onDone]() {
+        connect(watcher, &QFutureWatcher<QList<Task>>::finished, this, [this, watcher, localListId, remoteListId, remoteTaskIds, remoteChecklistItemsMap, onDone]() {
             QList<Task> localTasks = watcher->result();
             watcher->deleteLater();
 
@@ -390,7 +400,9 @@ void SyncEngine::syncTasksForList(const QString &localListId, const QString &rem
                         });
                     }
                     // Sincronizar subtareas de la tarea
-                    syncStepsForTask(remoteListId, locTask, pendingOps, checkDone);
+                    bool hasPrefetched = remoteChecklistItemsMap.contains(locTask.remoteId);
+                    QJsonArray prefetched = hasPrefetched ? remoteChecklistItemsMap.value(locTask.remoteId) : QJsonArray();
+                    syncStepsForTask(remoteListId, locTask, pendingOps, checkDone, prefetched, hasPrefetched);
                 }
             }
 
@@ -404,8 +416,8 @@ void SyncEngine::syncTasksForList(const QString &localListId, const QString &rem
                 for (const auto &rec : deletedRecords) {
                     if (rec.listRemoteId.isEmpty() || rec.listRemoteId == remoteListId) {
                         (*pendingOps)++;
-                        m_graph->deleteTask(remoteListId, rec.remoteId, [this, rec, checkDone](bool ok, const QString &err) {
-                            if (ok || err.contains("404") || err.contains("Error 404")) {
+                        m_graph->deleteTask(remoteListId, rec.remoteId, [this, rec, checkDone](bool ok, int statusCode, const QString &err) {
+                            if (ok || statusCode == 404 || statusCode == 410 || err.contains("404") || err.contains("Error 404")) {
                                 m_repo->removeDeletedTaskRecord(rec.id);
                             }
                             checkDone();
@@ -423,8 +435,8 @@ void SyncEngine::syncTasksForList(const QString &localListId, const QString &rem
                     for (const auto &srec : deletedSteps) {
                         if (srec.listRemoteId.isEmpty() || srec.listRemoteId == remoteListId) {
                             (*pendingOps)++;
-                            m_graph->deleteStep(remoteListId, srec.taskRemoteId, srec.remoteId, [this, srec, checkDone](bool ok, const QString &err) {
-                                if (ok || err.contains("404") || err.contains("Error 404")) {
+                            m_graph->deleteStep(remoteListId, srec.taskRemoteId, srec.remoteId, [this, srec, checkDone](bool ok, int statusCode, const QString &err) {
+                                if (ok || statusCode == 404 || statusCode == 410 || err.contains("404") || err.contains("Error 404")) {
                                     m_repo->removeDeletedStepRecord(srec.id);
                                 }
                                 checkDone();
@@ -441,20 +453,13 @@ void SyncEngine::syncTasksForList(const QString &localListId, const QString &rem
     });
 }
 
-void SyncEngine::syncStepsForTask(const QString &remoteListId, const Task &locTask, std::shared_ptr<int> pendingOps, std::function<void()> checkDone) {
-    (*pendingOps)++;
-    QPointer<SyncEngine> guard(this);
-    m_graph->fetchSteps(remoteListId, locTask.remoteId, [guard, locTask, remoteListId, pendingOps, checkDone](bool okSteps, const QJsonArray &remoteSteps, const QString &err) {
-        if (!guard) {
-            (*pendingOps)--;
-            return;
-        }
-        if (!okSteps) {
-            qWarning() << "[SyncEngine] Error al obtener subtareas para tarea:" << locTask.title << err;
-            checkDone();
-            return;
-        }
+void SyncEngine::syncStepsForTask(const QString &remoteListId, const Task &locTask, std::shared_ptr<int> pendingOps, std::function<void()> checkDone, const QJsonArray &prefetchedRemoteSteps, bool hasPrefetchedSteps) {
+    if (locTask.remoteId.isEmpty()) {
+        return;
+    }
 
+    auto processRemoteSteps = [this, remoteListId, locTask, pendingOps, checkDone](const QJsonArray &remoteSteps) {
+        QPointer<SyncEngine> guard(this);
         QSet<QString> remoteStepIds;
         QMap<QString, QJsonObject> remoteStepsMap;
         for (const auto &val : remoteSteps) {
@@ -464,9 +469,9 @@ void SyncEngine::syncStepsForTask(const QString &remoteListId, const Task &locTa
             remoteStepsMap.insert(rId, obj);
         }
 
-        auto futureSteps = guard->m_repo->fetchStepsForTask(locTask.id);
-        auto *stepWatcher = new QFutureWatcher<QList<TaskStep>>(guard.data());
-        connect(stepWatcher, &QFutureWatcher<QList<TaskStep>>::finished, guard.data(), [guard, stepWatcher, locTask, remoteListId, remoteStepIds, remoteStepsMap, pendingOps, checkDone]() {
+        auto futureSteps = m_repo->fetchStepsForTask(locTask.id);
+        auto *stepWatcher = new QFutureWatcher<QList<TaskStep>>(this);
+        connect(stepWatcher, &QFutureWatcher<QList<TaskStep>>::finished, this, [guard, stepWatcher, locTask, remoteListId, remoteStepIds, remoteStepsMap, pendingOps, checkDone]() {
             if (!guard) {
                 (*pendingOps)--;
                 return;
@@ -514,10 +519,24 @@ void SyncEngine::syncStepsForTask(const QString &remoteListId, const Task &locTa
                     QString rTitle = rObj.value("displayName").toString();
                     bool rChecked = rObj.value("isChecked").toBool();
                     if (st.title != rTitle || st.isCompleted != rChecked) {
-                        (*pendingOps)++;
-                        guard->m_graph->updateStep(remoteListId, locTask.remoteId, st.remoteId, st, [checkDone](bool, const QString &) {
-                            checkDone();
-                        });
+                        bool isLocallyDirty = !st.updatedAt.isEmpty() && (st.syncedAt.isEmpty() || st.updatedAt > st.syncedAt);
+                        if (isLocallyDirty) {
+                            (*pendingOps)++;
+                            guard->m_graph->updateStep(remoteListId, locTask.remoteId, st.remoteId, st, [guard, st, checkDone](bool okUpd, const QString &errUpd) {
+                                if (okUpd && guard) {
+                                    guard->m_repo->markStepSynced(st.id);
+                                } else if (!okUpd) {
+                                    qWarning() << "[SyncEngine] Error actualizando subtarea en Graph:" << st.title << errUpd;
+                                }
+                                checkDone();
+                            });
+                        } else {
+                            // Cambio remoto en Microsoft To Do -> actualizar SQLite
+                            TaskStep updatedRemoteStep = st;
+                            updatedRemoteStep.title = rTitle;
+                            updatedRemoteStep.isCompleted = rChecked;
+                            guard->m_repo->upsertRemoteStep(locTask.id, updatedRemoteStep);
+                        }
                     }
                 } else {
                     // Subtarea eliminada en remoto en Microsoft To Do -> eliminar localmente sin reencolar
@@ -528,5 +547,25 @@ void SyncEngine::syncStepsForTask(const QString &remoteListId, const Task &locTa
             checkDone();
         });
         stepWatcher->setFuture(futureSteps);
-    });
+    };
+
+    if (hasPrefetchedSteps) {
+        (*pendingOps)++;
+        processRemoteSteps(prefetchedRemoteSteps);
+    } else {
+        if (locTask.steps.isEmpty()) {
+            return;
+        }
+        (*pendingOps)++;
+        QPointer<SyncEngine> guard(this);
+        m_graph->fetchSteps(remoteListId, locTask.remoteId, [guard, processRemoteSteps, locTask, checkDone](bool okSteps, const QJsonArray &remoteSteps, const QString &err) {
+            if (!guard) return;
+            if (!okSteps) {
+                qWarning() << "[SyncEngine] Error al obtener subtareas para tarea:" << locTask.title << err;
+                checkDone();
+                return;
+            }
+            processRemoteSteps(remoteSteps);
+        });
+    }
 }

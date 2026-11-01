@@ -48,12 +48,6 @@ bool DaemonService::registerService() {
         QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals
     );
 
-    m_connection.registerObject(
-        QStringLiteral("/"),
-        this,
-        QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals
-    );
-
     if (!objRegistered) {
         qWarning() << "[DaemonService] No se pudo registrar el objeto D-Bus:"
                    << m_connection.lastError().message();
@@ -115,7 +109,7 @@ int DaemonService::GetTotalPendingCount() {
 }
 
 bool DaemonService::ToggleTask(const QString &taskId, bool completed) {
-    if (!m_repository) return false;
+    if (!m_repository || taskId.trimmed().isEmpty() || taskId.length() > 128) return false;
 
     auto taskFuture = m_repository->fetchTaskById(taskId);
     Task t = taskFuture.result();
@@ -135,7 +129,7 @@ bool DaemonService::ToggleTask(const QString &taskId, bool completed) {
 }
 
 bool DaemonService::DeleteTask(const QString &taskId) {
-    if (!m_repository) return false;
+    if (!m_repository || taskId.trimmed().isEmpty() || taskId.length() > 128) return false;
 
     auto taskFuture = m_repository->fetchTaskById(taskId);
     Task t = taskFuture.result();
@@ -155,16 +149,21 @@ bool DaemonService::DeleteTask(const QString &taskId) {
 }
 
 void DaemonService::RequestSync() {
+    if (m_syncRateLimiter.isValid() && m_syncRateLimiter.elapsed() < 5000) {
+        qDebug() << "[DaemonService] RequestSync ignorado por limitación de tasa (<5s)";
+        return;
+    }
+    m_syncRateLimiter.restart();
     qDebug() << "[DaemonService] Solicitud de sincronización recibida vía D-Bus";
     emit SyncRequested();
 }
 
 QString DaemonService::CreateTaskFromNaturalText(const QString &rawInput, bool addToMyDay) {
-    if (!m_repository || rawInput.trimmed().isEmpty()) {
+    if (!m_repository || rawInput.trimmed().isEmpty() || rawInput.length() > 1024) {
         return QString();
     }
 
-    auto parsed = TaskInputParser::parse(rawInput);
+    auto parsed = TaskInputParser::parse(rawInput.left(1024));
 
     // Determinar la lista destino
     QString targetListId = QStringLiteral("default-tasks");
@@ -178,11 +177,27 @@ QString DaemonService::CreateTaskFromNaturalText(const QString &rawInput, bool a
                 break;
             }
         }
-        // Si no existe la lista, la creamos
+        // Si no existe la lista, no la creamos automáticamente (evita que typos como #manana creen listas espurias)
         if (!found) {
-            TaskList createdList = m_repository->createList(parsed.targetListName).result();
-            if (!createdList.id.isEmpty()) {
-                targetListId = createdList.id;
+            qInfo() << "[DaemonService] Lista destino no encontrada:" << parsed.targetListName << "usando lista por defecto";
+            for (const auto &l : lists) {
+                if (l.id == QLatin1String("default-tasks")) {
+                    targetListId = l.id;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                for (const auto &l : lists) {
+                    if (!l.isSpecial) {
+                        targetListId = l.id;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found && !lists.isEmpty()) {
+                targetListId = lists.first().id;
             }
         }
     }
@@ -215,7 +230,8 @@ QString DaemonService::CreateTaskFromNaturalText(const QString &rawInput, bool a
 }
 
 QString DaemonService::PreviewNaturalText(const QString &rawInput) {
-    auto parsed = TaskInputParser::parse(rawInput);
+    QString safeInput = rawInput.left(1024);
+    auto parsed = TaskInputParser::parse(safeInput);
     QJsonObject obj;
     obj["cleanTitle"] = parsed.cleanTitle;
     obj["hasDueDate"] = parsed.hasDueDate;
@@ -255,7 +271,7 @@ QString DaemonService::GetOverdueTasks() {
 }
 
 bool DaemonService::RescheduleTaskForMyDay(const QString &taskId) {
-    if (!m_repository || taskId.isEmpty()) return false;
+    if (!m_repository || taskId.trimmed().isEmpty() || taskId.length() > 128) return false;
 
     auto future = m_repository->rescheduleTaskForMyDay(taskId);
     bool ok = future.result();
@@ -267,9 +283,15 @@ bool DaemonService::RescheduleTaskForMyDay(const QString &taskId) {
 }
 
 bool DaemonService::SnoozeTask(const QString &taskId, int minutes) {
-    if (!m_repository || taskId.isEmpty()) return false;
+    if (!m_repository || taskId.trimmed().isEmpty() || taskId.length() > 128) return false;
 
-    auto future = m_repository->snoozeTaskReminder(taskId, minutes);
+    // Validación de límites: entre 1 minuto y 1440 minutos (24 horas)
+    int safeMinutes = minutes;
+    if (safeMinutes < 1 || safeMinutes > 1440) {
+        safeMinutes = 15;
+    }
+
+    auto future = m_repository->snoozeTaskReminder(taskId, safeMinutes);
     bool ok = future.result();
     if (ok) {
         emit TodayTasksChanged();

@@ -156,6 +156,7 @@ Rectangle {
                             Text {
                                 Layout.fillWidth: true
                                 text: modelData.title
+                                textFormat: Text.PlainText
                                 color: modelData.isCompleted ? Theme.border : Theme.foreground
                                 font.family: "iA Writer Mono"
                                 font.pixelSize: 12
@@ -454,10 +455,11 @@ Rectangle {
 
                             Text {
                                 text: modelData
+                                textFormat: Text.PlainText
                                 color: Theme.accent
                                 font.family: "iA Writer Mono"
                                 font.pixelSize: 10
-                                elide: Text.ElideMiddle
+                                elide: Text.ElideRight
                                 width: Math.min(260, implicitWidth)
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -469,6 +471,10 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: Qt.openUrlExternally(modelData)
+
+                            ToolTip.visible: containsMouse
+                            ToolTip.text: modelData
+                            ToolTip.delay: 300
                         }
                     }
                 }

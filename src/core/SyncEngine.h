@@ -38,7 +38,7 @@ private slots:
 private:
     void performSync();
     void syncTasksForList(const QString &localListId, const QString &remoteListId, std::function<void()> onDone);
-    void syncStepsForTask(const QString &remoteListId, const Task &locTask, std::shared_ptr<int> pendingOps, std::function<void()> checkDone);
+    void syncStepsForTask(const QString &remoteListId, const Task &locTask, std::shared_ptr<int> pendingOps, std::function<void()> checkDone, const QJsonArray &prefetchedRemoteSteps = QJsonArray(), bool hasPrefetchedSteps = false);
 
     AuthManager     *m_auth = nullptr;
     GraphClient     *m_graph = nullptr;

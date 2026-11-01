@@ -96,6 +96,13 @@ TaskModel::TaskModel(LocalRepository *repo, GraphClient *graph, SyncEngine *sync
         emit overdueCountChanged();
         emit overdueSuggestionsChanged();
     });
+
+    connect(&m_listsWatcher, &QFutureWatcher<QList<TaskList>>::finished, this, [this]() {
+        m_cachedLists = m_listsWatcher.result();
+    });
+    if (m_repo) {
+        m_listsWatcher.setFuture(m_repo->fetchLists());
+    }
 }
 
 void TaskModel::resetPreservingSelection(const std::function<void()> &mutation) {
@@ -405,10 +412,11 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
             if (parsed.hasImportance) {
                 finalImportance = parsed.importance;
             }
-            if (parsed.hasTargetList && !parsed.targetListName.isEmpty() && m_repo) {
-                auto listFuture = m_repo->fetchLists();
-                QList<TaskList> allLists = listFuture.result();
-                for (const auto &l : allLists) {
+            if (parsed.hasTargetList && !parsed.targetListName.isEmpty()) {
+                if (m_cachedLists.isEmpty() && m_repo && !m_listsWatcher.isRunning()) {
+                    m_listsWatcher.setFuture(m_repo->fetchLists());
+                }
+                for (const auto &l : m_cachedLists) {
                     QString emoji, name;
                     TaskListModel::parseDisplayName(l.displayName, emoji, name);
                     if (name.compare(parsed.targetListName, Qt::CaseInsensitive) == 0 ||

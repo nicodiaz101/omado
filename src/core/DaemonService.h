@@ -5,6 +5,7 @@
 #include <QtDBus/QDBusContext>
 #include <QVariantMap>
 #include <QList>
+#include <QElapsedTimer>
 #include "models/TaskList.h"
 #include "models/Task.h"
 
@@ -46,4 +47,5 @@ signals:
 private:
     LocalRepository *m_repository;
     QDBusConnection  m_connection;
+    QElapsedTimer    m_syncRateLimiter;
 };

@@ -108,6 +108,8 @@ private:
     QList<int> m_visibleIndices;
     QFutureWatcher<QList<Task>> m_watcher;
     QFutureWatcher<QList<Task>> m_overdueWatcher;
+    QFutureWatcher<QList<TaskList>> m_listsWatcher;
+    QList<TaskList> m_cachedLists;
 
     void rebuildVisibleIndices();
     int actualIndex(int row) const;

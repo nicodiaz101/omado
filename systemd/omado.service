@@ -9,5 +9,16 @@ ExecStart=/usr/bin/omado --daemon
 Restart=on-failure
 RestartSec=5s
 
+# Hardening & Security Sandbox (SEC-08)
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/omacom-io %t
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallFilter=@system-service
+
 [Install]
 WantedBy=graphical-session.target

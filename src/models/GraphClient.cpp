@@ -40,6 +40,11 @@ void GraphClient::sendAuthorizedRequest(const QString &method, const QString &en
         QUrl url;
         if (endpoint.startsWith(QLatin1String("https://"))) {
             url = QUrl(endpoint);
+            if (url.scheme() != QLatin1String("https") || url.host().toLower() != QLatin1String("graph.microsoft.com") || !url.path().startsWith(QLatin1String("/v1.0/"))) {
+                qWarning() << "[GraphClient] Rechazando URL no confiable para Bearer Token:" << endpoint;
+                if (callback) callback(false, 0, QByteArray(), QStringLiteral("URL no confiable rechazada por seguridad"));
+                return;
+            }
         } else {
             url = QUrl(QString::fromLatin1(kBaseUrl) + endpoint);
         }
@@ -241,13 +246,14 @@ void GraphClient::deleteList(const QString &remoteListId, std::function<void(boo
 
 void GraphClient::fetchTasks(const QString &remoteListId, std::function<void(bool success, const QJsonArray &tasks, const QString &error)> callback) {
     QString encodedListId = QString::fromUtf8(QUrl::toPercentEncoding(remoteListId));
-    QString initialEndpoint = QStringLiteral("/lists/%1/tasks?$top=1000").arg(encodedListId);
+    QString initialEndpoint = QStringLiteral("/lists/%1/tasks?$top=1000&$expand=checklistItems").arg(encodedListId);
 
     auto allTasks = std::make_shared<QJsonArray>();
     auto fetchPage = std::make_shared<std::function<void(const QString &)>>();
+    std::weak_ptr<std::function<void(const QString &)>> weakFetchPage = fetchPage;
 
-    *fetchPage = [this, allTasks, callback, fetchPage](const QString &endpointOrUrl) {
-        sendAuthorizedRequest("GET", endpointOrUrl, QByteArray(), [allTasks, callback, fetchPage](bool ok, int, const QByteArray &data, const QString &err) {
+    *fetchPage = [this, allTasks, callback, weakFetchPage](const QString &endpointOrUrl) {
+        sendAuthorizedRequest("GET", endpointOrUrl, QByteArray(), [allTasks, callback, weakFetchPage](bool ok, int, const QByteArray &data, const QString &err) {
             if (!ok) {
                 if (callback) callback(false, *allTasks, err);
                 return;
@@ -266,7 +272,9 @@ void GraphClient::fetchTasks(const QString &remoteListId, std::function<void(boo
 
             QString nextLink = root.value("@odata.nextLink").toString();
             if (!nextLink.isEmpty()) {
-                (*fetchPage)(nextLink);
+                if (auto fp = weakFetchPage.lock()) {
+                    (*fp)(nextLink);
+                }
             } else {
                 if (callback) callback(true, *allTasks, QString());
             }
@@ -306,11 +314,11 @@ void GraphClient::updateTask(const QString &remoteListId, const Task &task, std:
     });
 }
 
-void GraphClient::deleteTask(const QString &remoteListId, const QString &remoteTaskId, std::function<void(bool success, const QString &error)> callback) {
+void GraphClient::deleteTask(const QString &remoteListId, const QString &remoteTaskId, std::function<void(bool success, int statusCode, const QString &error)> callback) {
     QString encodedListId = QString::fromUtf8(QUrl::toPercentEncoding(remoteListId));
     QString encodedTaskId = QString::fromUtf8(QUrl::toPercentEncoding(remoteTaskId));
-    sendAuthorizedRequest("DELETE", QStringLiteral("/lists/%1/tasks/%2").arg(encodedListId, encodedTaskId), QByteArray(), [callback](bool ok, int, const QByteArray &, const QString &err) {
-        if (callback) callback(ok, err);
+    sendAuthorizedRequest("DELETE", QStringLiteral("/lists/%1/tasks/%2").arg(encodedListId, encodedTaskId), QByteArray(), [callback](bool ok, int statusCode, const QByteArray &, const QString &err) {
+        if (callback) callback(ok, statusCode, err);
     });
 }
 
@@ -365,11 +373,11 @@ void GraphClient::updateStep(const QString &remoteListId, const QString &remoteT
     });
 }
 
-void GraphClient::deleteStep(const QString &remoteListId, const QString &remoteTaskId, const QString &remoteStepId, std::function<void(bool success, const QString &error)> callback) {
+void GraphClient::deleteStep(const QString &remoteListId, const QString &remoteTaskId, const QString &remoteStepId, std::function<void(bool success, int statusCode, const QString &error)> callback) {
     QString encodedListId = QString::fromUtf8(QUrl::toPercentEncoding(remoteListId));
     QString encodedTaskId = QString::fromUtf8(QUrl::toPercentEncoding(remoteTaskId));
     QString encodedStepId = QString::fromUtf8(QUrl::toPercentEncoding(remoteStepId));
-    sendAuthorizedRequest("DELETE", QStringLiteral("/lists/%1/tasks/%2/checklistItems/%3").arg(encodedListId, encodedTaskId, encodedStepId), QByteArray(), [callback](bool ok, int, const QByteArray &, const QString &err) {
-        if (callback) callback(ok, err);
+    sendAuthorizedRequest("DELETE", QStringLiteral("/lists/%1/tasks/%2/checklistItems/%3").arg(encodedListId, encodedTaskId, encodedStepId), QByteArray(), [callback](bool ok, int statusCode, const QByteArray &, const QString &err) {
+        if (callback) callback(ok, statusCode, err);
     });
 }
