@@ -8,10 +8,20 @@ import "."
 Popup {
     id: popup
     width: 320
-    height: Math.min(360, contentCol.implicitHeight + 24)
+    height: Math.min(360, 68 + (listView.count > 0 ? Math.min(240, listView.count * 54) : 40))
     padding: 12
     modal: true
     focus: true
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+    Connections {
+        target: TaskModel
+        function onOverdueCountChanged() {
+            if (TaskModel.overdueCount === 0) {
+                popup.close()
+            }
+        }
+    }
 
     background: Rectangle {
         color: Theme.surface
@@ -63,11 +73,15 @@ Popup {
             id: listView
             Layout.fillWidth: true
             Layout.fillHeight: true
+            implicitHeight: count > 0 ? Math.min(240, count * 54) : 40
+            Layout.preferredHeight: implicitHeight
             clip: true
             spacing: 6
             model: TaskModel.overdueSuggestions
 
             delegate: Rectangle {
+                id: itemCard
+                required property var modelData
                 width: listView.width
                 height: 48
                 radius: 6
@@ -86,7 +100,7 @@ Popup {
                         spacing: 2
 
                         Text {
-                            text: modelData.title
+                            text: (modelData && modelData.title) ? modelData.title : ""
                             color: Theme.foreground
                             font.family: "iA Writer Mono"
                             font.pixelSize: 12
@@ -95,7 +109,7 @@ Popup {
                         }
 
                         Text {
-                            text: modelData.dueDate !== "" ? (qsTr("Due: ") + modelData.dueDate) : (qsTr("Overdue reminder"))
+                            text: (modelData && modelData.dueDate && modelData.dueDate !== "") ? (qsTr("Due: ") + modelData.dueDate) : (qsTr("Overdue reminder"))
                             color: Theme.subtext
                             font.family: "iA Writer Mono"
                             font.pixelSize: 10

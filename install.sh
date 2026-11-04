@@ -57,6 +57,7 @@ else
     cp ../systemd/omado.service "$HOME/.config/systemd/user/" 2>/dev/null || true
     if [ -f "$HOME/.local/bin/omado" ]; then
         sed -i "s|ExecStart=/usr/bin/omado|ExecStart=$HOME/.local/bin/omado|" "$HOME/.config/systemd/user/omado.service" 2>/dev/null || true
+        sed -i "s|Exec=omado|Exec=$HOME/.local/bin/omado|g" "$HOME/.local/share/applications/omado.desktop" 2>/dev/null || true
     fi
     # Clean up obsolete desktop autostart entry in favor of systemd user service
     rm -f "$HOME/.config/autostart/omado-daemon.desktop"
