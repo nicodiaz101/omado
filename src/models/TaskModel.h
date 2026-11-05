@@ -84,6 +84,12 @@ public:
     Q_INVOKABLE void addStep(int row, const QString &stepTitle);
     Q_INVOKABLE void toggleStep(int row, int stepIndex);
     Q_INVOKABLE void deleteStep(int row, int stepIndex);
+
+    Q_INVOKABLE void launchOmarchyAgent(const QString &prompt = QString());
+    Q_INVOKABLE bool configureHyprlandShortcut(const QString &shortcut = QStringLiteral("SUPER + ALT + T"));
+    Q_INVOKABLE bool isHyprlandShortcutConfigured() const;
+    Q_INVOKABLE QString configuredHyprlandShortcut() const;
+    Q_INVOKABLE void copyToClipboard(const QString &text);
     
 signals:
     void currentListIdChanged();
@@ -114,4 +120,5 @@ private:
     void rebuildVisibleIndices();
     int actualIndex(int row) const;
     void notifyRowChanged(int row);
+    void notifyDBusChange(const QString &listId, bool isToday = true);
 };

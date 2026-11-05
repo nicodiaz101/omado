@@ -8,6 +8,8 @@ import "components"
 Item {
     id: root
 
+    signal openQuickAddGuide()
+
     property alias inputBar: inputBar
 
     function getListTitle() {
@@ -117,6 +119,71 @@ Item {
                                 id: suggestionsPopup
                                 y: parent.height + 6
                                 x: parent.width - width
+                            }
+                        }
+
+                        // Quick Add Guide & Shortcut Button
+                        Rectangle {
+                            id: quickAddBtn
+                            height: 22
+                            width: quickAddRow.implicitWidth + 14
+                            radius: 11
+                            color: mouseAreaQuickAdd.containsMouse
+                                   ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
+                                   : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12)
+                            border.color: Theme.accent
+                            border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            Row {
+                                id: quickAddRow
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                AppIcon {
+                                    name: "sparkles"
+                                    size: 11
+                                    color: Theme.accent
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                Text {
+                                    text: qsTr("Quick Add")
+                                    color: Theme.accent
+                                    font.family: "iA Writer Mono"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            MouseArea {
+                                id: mouseAreaQuickAdd
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openQuickAddGuide()
+                            }
+
+                            ToolTip {
+                                id: quickAddToolTip
+                                visible: mouseAreaQuickAdd.containsMouse
+                                delay: 300
+                                text: qsTr("Quick Add syntax & Hyprland shortcut")
+
+                                contentItem: Text {
+                                    text: quickAddToolTip.text
+                                    font.family: "iA Writer Mono"
+                                    font.pixelSize: 11
+                                    color: Theme.foreground
+                                }
+                                background: Rectangle {
+                                    color: Theme.surface
+                                    border.color: Theme.border
+                                    border.width: 1
+                                    radius: 4
+                                }
                             }
                         }
 

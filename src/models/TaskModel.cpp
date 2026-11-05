@@ -6,6 +6,15 @@
 #include <QUuid>
 #include <QDebug>
 #include <QSettings>
+#include <QStandardPaths>
+#include <QtDBus/QDBusConnection>
+#include <QtDBus/QDBusMessage>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QDir>
+#include <QFile>
+#include <QProcess>
+#include <QTextStream>
 #include <algorithm>
 
 static QDateTime parseDateTimeLocal(const QString &str) {
@@ -507,6 +516,7 @@ void TaskModel::addTaskWithSteps(const QString &title, const QString &dueDate, c
     }
     
     m_repo->createTask(t);
+    notifyDBusChange(t.listId, t.isMyDay || t.dueDate == QDate::currentDate() || (t.reminderAt.isValid() && t.reminderAt.date() == QDate::currentDate()));
     if (m_sync) {
         m_sync->scheduleSync(300);
     }
@@ -570,6 +580,7 @@ void TaskModel::toggleTaskCompletion(int row) {
     }
 
     m_repo->updateTask(m_tasks[actIdx]);
+    notifyDBusChange(m_tasks[actIdx].listId, m_tasks[actIdx].isMyDay || m_tasks[actIdx].dueDate == QDate::currentDate());
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {
         QString remoteListId = m_repo->getListRemoteId(m_tasks[actIdx].listId);
@@ -611,6 +622,7 @@ void TaskModel::toggleTaskImportance(int row) {
         notifyRowChanged(row);
     }
     m_repo->updateTask(m_tasks[actIdx]);
+    notifyDBusChange(m_tasks[actIdx].listId, m_tasks[actIdx].isMyDay || m_tasks[actIdx].dueDate == QDate::currentDate());
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {
         QString remoteListId = m_repo->getListRemoteId(m_tasks[actIdx].listId);
@@ -629,6 +641,7 @@ void TaskModel::toggleTaskMyDay(int row) {
     m_tasks[actIdx].isMyDay = !m_tasks[actIdx].isMyDay;
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[actIdx]);
+    notifyDBusChange(m_tasks[actIdx].listId, true);
     if (m_sync) {
         m_sync->scheduleSync(800);
     }
@@ -640,6 +653,7 @@ void TaskModel::updateTaskTitle(int row, const QString &title) {
     m_tasks[actIdx].title = title.trimmed();
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[actIdx]);
+    notifyDBusChange(m_tasks[actIdx].listId, m_tasks[actIdx].isMyDay || m_tasks[actIdx].dueDate == QDate::currentDate());
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {
         QString remoteListId = m_repo->getListRemoteId(m_tasks[actIdx].listId);
@@ -658,6 +672,7 @@ void TaskModel::updateTaskBody(int row, const QString &body) {
     m_tasks[actIdx].body = body;
     notifyRowChanged(row);
     m_repo->updateTask(m_tasks[actIdx]);
+    notifyDBusChange(m_tasks[actIdx].listId, m_tasks[actIdx].isMyDay || m_tasks[actIdx].dueDate == QDate::currentDate());
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {
         QString remoteListId = m_repo->getListRemoteId(m_tasks[actIdx].listId);
@@ -703,6 +718,7 @@ void TaskModel::updateTaskDueDate(int row, const QString &dueDate) {
         notifyRowChanged(row);
     }
     m_repo->updateTask(m_tasks[actIdx]);
+    notifyDBusChange(m_tasks[actIdx].listId, m_tasks[actIdx].isMyDay || m_tasks[actIdx].dueDate == QDate::currentDate());
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {
         QString remoteListId = m_repo->getListRemoteId(m_tasks[actIdx].listId);
@@ -749,6 +765,7 @@ void TaskModel::updateTaskReminder(int row, const QString &reminderAt) {
         notifyRowChanged(row);
     }
     m_repo->updateTask(m_tasks[actIdx]);
+    notifyDBusChange(m_tasks[actIdx].listId, m_tasks[actIdx].isMyDay || m_tasks[actIdx].dueDate == QDate::currentDate());
 
     if (m_graph && !m_tasks[actIdx].remoteId.isEmpty() && m_repo) {
         QString remoteListId = m_repo->getListRemoteId(m_tasks[actIdx].listId);
@@ -784,6 +801,7 @@ void TaskModel::deleteTask(int row) {
     emit countChanged();
 
     m_repo->deleteTask(taskId);
+    notifyDBusChange(listId, true);
 
     if (m_graph && !remoteId.isEmpty() && m_repo) {
         QString remoteListId = m_repo->getListRemoteId(listId);
@@ -839,5 +857,108 @@ void TaskModel::deleteStep(int row, int stepIndex) {
     m_repo->deleteStep(stepId);
     if (m_sync) {
         m_sync->scheduleSync(800);
+    }
+}
+
+void TaskModel::notifyDBusChange(const QString &listId, bool isToday) {
+    if (!QStandardPaths::isTestModeEnabled()) {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (bus.isConnected()) {
+            QDBusMessage msg = QDBusMessage::createSignal(
+                QStringLiteral("/io/omarchy/OmaDo"),
+                QStringLiteral("io.omarchy.OmaDo"),
+                QStringLiteral("TasksChanged")
+            );
+            msg << listId;
+            bus.send(msg);
+
+            if (isToday) {
+                QDBusMessage msgToday = QDBusMessage::createSignal(
+                    QStringLiteral("/io/omarchy/OmaDo"),
+                    QStringLiteral("io.omarchy.OmaDo"),
+                    QStringLiteral("TodayTasksChanged")
+                );
+                bus.send(msgToday);
+            }
+        }
+    }
+}
+
+void TaskModel::launchOmarchyAgent(const QString &prompt) {
+    QString safePrompt = prompt.trimmed();
+    QString shortcut = safePrompt.isEmpty() ? QStringLiteral("SUPER + ALT + T") : safePrompt;
+
+    if (!shortcut.contains(QLatin1Char('\n')) && (safePrompt.isEmpty() || !safePrompt.contains(QStringLiteral("bindings.lua")))) {
+        safePrompt = QStringLiteral("Configure a global keybinding for OmaDo Quick Add in ~/.config/hypr/bindings.lua. Use o.bind(\"%1\", \"OmaDo Quick Add\", { launch = \"omado quick add\" }). Then run `hyprctl reload` and verify with `hyprctl configerrors`.").arg(shortcut);
+    }
+    QProcess::startDetached(QStringLiteral("omarchy"), {QStringLiteral("agent"), QStringLiteral("prompt"), safePrompt});
+}
+
+bool TaskModel::configureHyprlandShortcut(const QString &shortcut) {
+    QString combo = shortcut.trimmed();
+    if (combo.isEmpty()) {
+        combo = QStringLiteral("SUPER + ALT + T");
+    }
+    QString configPath = QDir::homePath() + QStringLiteral("/.config/hypr/bindings.lua");
+    QFile file(configPath);
+    if (!file.exists()) {
+        return false;
+    }
+    if (!file.open(QIODevice::ReadWrite | QIODevice::Text)) {
+        return false;
+    }
+    QString content = QString::fromUtf8(file.readAll());
+    QRegularExpression re(QStringLiteral("(?:-- OmaDo Quick Add global shortcut\\n)?o\\.bind\\([^\\n]*omado(?:\\s+quick(?:\\s+add)?|\\s+--quick-add)[^\\n]*\\)\\n?"));
+    QString newBinding = QStringLiteral("o.bind(\"%1\", \"OmaDo Quick Add\", { launch = \"omado quick add\" })\n").arg(combo);
+
+    if (re.match(content).hasMatch()) {
+        content.replace(re, newBinding);
+    } else {
+        if (!content.endsWith(QLatin1Char('\n'))) {
+            content += QLatin1Char('\n');
+        }
+        content += QStringLiteral("\n-- OmaDo Quick Add global shortcut\n") + newBinding;
+    }
+
+    file.resize(0);
+    QTextStream out(&file);
+    out << content;
+    file.close();
+
+    if (qEnvironmentVariableIsSet("HYPRLAND_INSTANCE_SIGNATURE")) {
+        QProcess::execute(QStringLiteral("hyprctl"), {QStringLiteral("reload")});
+    }
+    return true;
+}
+
+bool TaskModel::isHyprlandShortcutConfigured() const {
+    QString configPath = QDir::homePath() + QStringLiteral("/.config/hypr/bindings.lua");
+    QFile file(configPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return false;
+    }
+    QString content = QString::fromUtf8(file.readAll());
+    return content.contains(QStringLiteral("omado quick add")) || content.contains(QStringLiteral("omado --quick-add"));
+}
+
+QString TaskModel::configuredHyprlandShortcut() const {
+    QString configPath = QDir::homePath() + QStringLiteral("/.config/hypr/bindings.lua");
+    QFile file(configPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+    QString content = QString::fromUtf8(file.readAll());
+    QRegularExpression re(QStringLiteral("o\\.bind\\(\\s*[\"']([^\"']+)[\"']\\s*,\\s*[\"'][^\"']*[\"']\\s*,\\s*\\{[^}]*omado(?:\\s+quick(?:\\s+add)?|\\s+--quick-add)[^}]*\\}\\)"));
+    QRegularExpressionMatch match = re.match(content);
+    if (match.hasMatch()) {
+        return match.captured(1).trimmed();
+    }
+    return QString();
+}
+
+void TaskModel::copyToClipboard(const QString &text) {
+    QClipboard *cb = QGuiApplication::clipboard();
+    if (cb) {
+        cb->setText(text);
     }
 }

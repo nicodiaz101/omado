@@ -10,6 +10,10 @@ Rectangle {
     height: 46
     color: Theme.surface
 
+    property alias text: taskInput.text
+    property bool showActionButtons: true
+    property bool popupsOpenUpwards: true
+    readonly property bool isAnyPopupOpen: (datePicker.visible || timePicker.visible || recurrencePopup.visible || draftStepsPopup.visible)
     property string draftDueDate: ""
     property string draftReminderAt: ""
     property string draftRecurrence: "none"
@@ -33,6 +37,7 @@ Rectangle {
 
     function focusInput() {
         taskInput.forceActiveFocus()
+        taskInput.cursorPosition = taskInput.text.length
     }
 
     Rectangle {
@@ -64,7 +69,7 @@ Rectangle {
             selectByMouse: true
 
             Text {
-                text: qsTr("Add a task...")
+                text: root.showActionButtons ? qsTr("Add a task...") : qsTr("Add task with natural language (e.g. Tomorrow 6pm #Work !)...")
                 color: Theme.foreground
                 opacity: 0.4
                 font.family: "iA Writer Mono"
@@ -332,6 +337,7 @@ Rectangle {
 
         // 4 Action Buttons with crisp SVG vector icons
         Row {
+            visible: root.showActionButtons
             spacing: 14
 
             // 1. Due Date (Calendar)
@@ -353,6 +359,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        timePicker.close()
+                        recurrencePopup.close()
+                        draftStepsPopup.close()
                         datePicker.open()
                     }
                 }
@@ -360,7 +369,7 @@ Rectangle {
                 DatePickerPopup {
                     id: datePicker
                     x: -width + parent.width
-                    y: -height - 8
+                    y: root.popupsOpenUpwards ? (-height - 8) : (parent.height + 8)
                     onDateSelected: function(iso) {
                         root.draftDueDate = iso
                     }
@@ -386,6 +395,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        datePicker.close()
+                        recurrencePopup.close()
+                        draftStepsPopup.close()
                         timePicker.open()
                     }
                 }
@@ -393,7 +405,7 @@ Rectangle {
                 TimePickerPopup {
                     id: timePicker
                     x: -width + parent.width
-                    y: -height - 8
+                    y: root.popupsOpenUpwards ? (-height - 8) : (parent.height + 8)
                     onTimeSelected: function(iso) {
                         root.draftReminderAt = iso
                     }
@@ -419,6 +431,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        datePicker.close()
+                        timePicker.close()
+                        draftStepsPopup.close()
                         recurrencePopup.open()
                     }
                 }
@@ -426,7 +441,7 @@ Rectangle {
                 RecurrencePopup {
                     id: recurrencePopup
                     x: -width + parent.width
-                    y: -height - 8
+                    y: root.popupsOpenUpwards ? (-height - 8) : (parent.height + 8)
                     onRecurrenceSelected: function(rec) {
                         root.draftRecurrence = rec
                     }
@@ -452,6 +467,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        datePicker.close()
+                        timePicker.close()
+                        recurrencePopup.close()
                         draftStepsPopup.open()
                     }
                 }
@@ -459,7 +477,7 @@ Rectangle {
                 DraftStepsPopup {
                     id: draftStepsPopup
                     x: -width + parent.width
-                    y: -height - 8
+                    y: root.popupsOpenUpwards ? (-height - 8) : (parent.height + 8)
                     onStepsChanged: function(newSteps) {
                         root.draftSteps = newSteps
                     }

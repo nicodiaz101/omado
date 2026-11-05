@@ -72,6 +72,7 @@ qt_add_qml_module(omado
         src/qml/components/ListRenameDialog.qml
         src/qml/components/MyDaySuggestionsPopup.qml
         src/qml/components/ShortcutHelpOverlay.qml
+        src/qml/components/QuickAddGuideDialog.qml
     RESOURCES
         fonts/iAWriterMono-Regular.ttf
         fonts/iAWriterMono-Bold.ttf

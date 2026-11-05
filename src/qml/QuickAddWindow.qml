@@ -8,12 +8,31 @@ import "components"
 ApplicationWindow {
     id: quickAddWindow
     width: 600
-    height: 120
+    height: 104
     visible: true
     title: "OmaDo Quick Add"
 
-    flags: Qt.FramelessWindowHint | Qt.Dialog
+    property string initialText: ""
+
+    flags: Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint
     color: "transparent"
+
+    x: Screen.width > width ? Math.round((Screen.width - width) / 2) : 0
+    y: Screen.height > height ? Math.round((Screen.height - height) / 3) : 0
+
+    Component.onCompleted: {
+        quickAddWindow.requestActivate()
+    }
+
+    Timer {
+        interval: 50
+        running: true
+        repeat: false
+        onTriggered: {
+            quickAddWindow.requestActivate()
+            inputBar.focusInput()
+        }
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -46,11 +65,33 @@ ApplicationWindow {
                     Layout.fillWidth: true
                 }
 
-                Text {
-                    text: "Esc " + qsTr("to close")
-                    color: Theme.subtext
-                    font.family: "iA Writer Mono"
-                    font.pixelSize: 10
+                RowLayout {
+                    spacing: 6
+
+                    Text {
+                        text: "Esc " + qsTr("to close")
+                        color: Theme.subtext
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                    }
+
+                    Item {
+                        width: 16
+                        height: 16
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            name: "close"
+                            size: 12
+                            color: Theme.subtext
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: quickAddWindow.close()
+                        }
+                    }
                 }
             }
 
@@ -58,6 +99,8 @@ ApplicationWindow {
                 id: inputBar
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46
+                showActionButtons: false
+                text: quickAddWindow.initialText
 
                 onTaskAdded: {
                     quickAddWindow.close()

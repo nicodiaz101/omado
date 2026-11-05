@@ -22,34 +22,57 @@
 #include <QtDBus/QDBusConnection>
 #include <QDebug>
 #include <QTextStream>
+#include <QProcess>
+#include <QLoggingCategory>
 
 int main(int argc, char *argv[])
 {
+    QLoggingCategory::setFilterRules(QStringLiteral("qt.qpa.services.warning=false\nqt.svg.warning=false"));
+
     bool isDaemon = false;
     bool isQuickAdd = false;
+    QString quickAddInitialText;
     QStringList cliArgs;
 
     for (int i = 1; i < argc; ++i) {
         QString arg = QString::fromUtf8(argv[i]);
         if (arg == "--daemon" || arg == "-d") {
             isDaemon = true;
-        } else if (arg == "--quick-add") {
+        } else if (arg == "--quick-add" || arg == "-q" || arg == "--quick" || arg == "quick-add" || arg == "quickadd") {
             isQuickAdd = true;
+            QStringList textParts;
+            for (int j = i + 1; j < argc; ++j) {
+                textParts.append(QString::fromUtf8(argv[j]));
+            }
+            quickAddInitialText = textParts.join(QLatin1Char(' '));
+            break;
+        } else if (arg == "quick") {
+            isQuickAdd = true;
+            int next = i + 1;
+            if (next < argc && QString::fromUtf8(argv[next]).compare("add", Qt::CaseInsensitive) == 0) {
+                next++;
+            }
+            QStringList textParts;
+            for (int j = next; j < argc; ++j) {
+                textParts.append(QString::fromUtf8(argv[j]));
+            }
+            quickAddInitialText = textParts.join(QLatin1Char(' '));
+            break;
         } else if (arg == "--version" || arg == "-v") {
             QTextStream(stdout) << "OmaDo v2.0.0 (Omarchy 4.5)" << Qt::endl;
             return 0;
         } else if (arg == "--help" || arg == "-h") {
             QTextStream(stdout) << "Uso: omado [opciones] [comando]\n\n"
                                 << "Opciones:\n"
-                                << "  -d, --daemon     Ejecutar como daemon en segundo plano\n"
-                                << "  --quick-add      Abrir ventana flotante de creación rápida\n"
-                                << "  -v, --version    Mostrar versión\n"
-                                << "  -h, --help       Mostrar esta ayuda\n\n"
+                                << "  -d, --daemon                  Ejecutar como daemon en segundo plano\n"
+                                << "  -q, --quick-add, quick [add]  Abrir ventana flotante de creación rápida\n"
+                                << "  -v, --version                 Mostrar versión\n"
+                                << "  -h, --help                    Mostrar esta ayuda\n\n"
                                 << "Comandos CLI:\n"
-                                << "  add \"<texto>\" [--today]   Crear tarea con lenguaje natural\n"
-                                << "  list [--today] [--json]     Listar tareas o listas\n"
-                                << "  done <task-id>              Marcar tarea como completada\n"
-                                << "  reschedule <task-id>        Reprogramar tarea para Mi Día\n";
+                                << "  add \"<texto>\" [--today]        Crear tarea con lenguaje natural\n"
+                                << "  list [--today] [--json]          Listar tareas o listas\n"
+                                << "  done <task-id>                   Marcar tarea como completada\n"
+                                << "  reschedule <task-id>             Reprogramar tarea para Mi Día\n";
             return 0;
         } else if (!arg.startsWith("-")) {
             // Comandos CLI (add, list, done, reschedule)
@@ -127,7 +150,11 @@ int main(int argc, char *argv[])
     app.setApplicationName("OmaDo");
     app.setApplicationVersion("2.0.0");
     app.setDesktopFileName(QStringLiteral("omado"));
-    app.setWindowIcon(QIcon(":/qt/qml/OmaDo/icons/omado.svg"));
+    QIcon appIcon = QIcon::fromTheme(QStringLiteral("omado"), QIcon(QStringLiteral(":/OmaDo/icons/omado.svg")));
+    if (appIcon.isNull()) {
+        appIcon = QIcon(QStringLiteral(":/qt/qml/OmaDo/icons/omado.svg"));
+    }
+    app.setWindowIcon(appIcon);
 
     // Cargar fuentes
     int fontId = QFontDatabase::addApplicationFont(":/qt/qml/OmaDo/fonts/iAWriterMono-Regular.ttf");
@@ -220,6 +247,20 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection);
     
     if (isQuickAdd) {
+        if (!quickAddInitialText.isEmpty()) {
+            QVariantMap initialProps;
+            initialProps.insert(QStringLiteral("initialText"), quickAddInitialText);
+            engine.setInitialProperties(initialProps);
+        }
+
+        // Si se ejecuta bajo Hyprland (Omarchy), asegurar que la ventana flote dinámicamente
+        if (qEnvironmentVariableIsSet("HYPRLAND_INSTANCE_SIGNATURE")) {
+            QProcess::execute(QStringLiteral("hyprctl"), {
+                QStringLiteral("eval"),
+                QStringLiteral("if o and o.window then o.window({ title = \"OmaDo Quick Add\" }, { float = true, center = true, pin = true }) end")
+            });
+        }
+
         engine.loadFromModule("OmaDo", "QuickAddWindow");
     } else {
         engine.loadFromModule("OmaDo", "Main");

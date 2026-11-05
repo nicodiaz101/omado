@@ -22,6 +22,10 @@ ApplicationWindow {
         id: helpOverlay
     }
 
+    QuickAddGuideDialog {
+        id: quickAddGuideDialog
+    }
+
     Rectangle {
         anchors.fill: parent
         color: Theme.background
@@ -47,6 +51,7 @@ ApplicationWindow {
                 id: taskView
                 Layout.fillHeight: true
                 Layout.fillWidth: true
+                onOpenQuickAddGuide: quickAddGuideDialog.open()
             }
         }
     }

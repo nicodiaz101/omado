@@ -69,6 +69,17 @@ else
         systemctl --user enable --now omado.service 2>/dev/null || true
         echo -e "${GREEN}✓ Servicio systemd de usuario (omado.service) activado.${NC}"
     fi
+
+    # Configure Hyprland floating window rule if Omarchy/Hyprland config exists
+    if [ -f "$HOME/.config/hypr/hyprland.lua" ]; then
+        if ! grep -q "OmaDo Quick Add" "$HOME/.config/hypr/hyprland.lua"; then
+            echo -e '\n-- OmaDo Quick Add floating overlay\no.window({ title = "OmaDo Quick Add" }, { float = true, center = true, pin = true })' >> "$HOME/.config/hypr/hyprland.lua"
+            if command -v hyprctl &>/dev/null; then
+                hyprctl reload &>/dev/null || true
+            fi
+            echo -e "${GREEN}✓ Regla de ventana flotante para Hyprland configurada en ~/.config/hypr/hyprland.lua.${NC}"
+        fi
+    fi
 fi
 
 echo -e "\n${GREEN}✓ ¡OmaDo v${VERSION} se instaló correctamente!${NC}"
