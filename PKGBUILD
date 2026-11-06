@@ -1,11 +1,12 @@
 # Maintainer: Nicolas Diaz <nico.d5155@outlook.com.ar>
 pkgname=omado-git
-pkgver=2.0.0.r0.0000000
+pkgver=2.0.1.r0.0000000
 pkgrel=1
 pkgdesc="Ultra-lightweight native task manager with Microsoft To Do sync for Omarchy"
 arch=('x86_64' 'aarch64')
 url="https://github.com/nicodiaz101/omado"
 license=('GPL-3.0-or-later')
+install=omado.install
 depends=(
     'qt6-base'
     'qt6-declarative'
@@ -25,7 +26,7 @@ sha256sums=('SKIP')
 
 pkgver() {
     cd "$srcdir/omado"
-    printf "2.0.0.r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    printf "2.0.1.r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 build() {

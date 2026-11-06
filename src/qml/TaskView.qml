@@ -76,8 +76,11 @@ Item {
                         Rectangle {
                             id: overdueBtn
                             visible: TaskModel.currentListId === "special-myday" && TaskModel.overdueCount > 0
-                            height: 24
-                            width: overdueRow.implicitWidth + 14
+                            implicitHeight: 24
+                            implicitWidth: overdueRow.implicitWidth + 14
+                            Layout.preferredHeight: implicitHeight
+                            Layout.preferredWidth: implicitWidth
+                            Layout.alignment: Qt.AlignVCenter
                             radius: 12
                             color: overdueArea.containsMouse
                                    ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
@@ -125,8 +128,11 @@ Item {
                         // Quick Add Guide & Shortcut Button
                         Rectangle {
                             id: quickAddBtn
-                            height: 22
-                            width: quickAddRow.implicitWidth + 14
+                            implicitHeight: 22
+                            implicitWidth: quickAddRow.implicitWidth + 14
+                            Layout.preferredHeight: implicitHeight
+                            Layout.preferredWidth: implicitWidth
+                            Layout.alignment: Qt.AlignVCenter
                             radius: 11
                             color: mouseAreaQuickAdd.containsMouse
                                    ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
@@ -190,8 +196,11 @@ Item {
                         // Sort Button: Order by due date / reminder
                         Rectangle {
                             id: sortToggleBtn
-                            height: 22
-                            width: 22
+                            implicitHeight: 22
+                            implicitWidth: 22
+                            Layout.preferredHeight: implicitHeight
+                            Layout.preferredWidth: implicitWidth
+                            Layout.alignment: Qt.AlignVCenter
                             radius: 11
                             color: TaskModel.sortByDueDate
                                    ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
@@ -242,8 +251,11 @@ Item {
                         // Filter Button: Hide / Show completed tasks
                         Rectangle {
                             id: filterToggleBtn
-                            height: 22
-                            width: 22
+                            implicitHeight: 22
+                            implicitWidth: 22
+                            Layout.preferredHeight: implicitHeight
+                            Layout.preferredWidth: implicitWidth
+                            Layout.alignment: Qt.AlignVCenter
                             radius: 11
                             color: TaskModel.hideCompleted
                                    ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)

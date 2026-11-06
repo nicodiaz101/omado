@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(omado VERSION 2.0.0 LANGUAGES CXX)
+project(omado VERSION 2.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -104,7 +104,9 @@ install(TARGETS omado RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES icons/omado.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 install(FILES omado.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES systemd/omado.service DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/user OPTIONAL)
+install(FILES systemd/50-omado.preset DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/user-preset OPTIONAL)
 install(FILES io.omarchy.OmaDo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/interfaces OPTIONAL)
+install(FILES dbus/io.omarchy.OmaDo.service DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services OPTIONAL)
 
 option(BUILD_TESTING "Build the testing tree." ON)
 if(BUILD_TESTING)

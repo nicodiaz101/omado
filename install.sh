@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-VERSION="2.0.0"
+VERSION="2.0.1"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -54,9 +54,12 @@ else
     # Ensure local data directory and systemd user service directory exist
     mkdir -p "$HOME/.local/share/omacom-io"
     mkdir -p "$HOME/.config/systemd/user"
+    mkdir -p "$HOME/.local/share/dbus-1/services"
     cp ../systemd/omado.service "$HOME/.config/systemd/user/" 2>/dev/null || true
+    cp ../dbus/io.omarchy.OmaDo.service "$HOME/.local/share/dbus-1/services/" 2>/dev/null || true
     if [ -f "$HOME/.local/bin/omado" ]; then
         sed -i "s|ExecStart=/usr/bin/omado|ExecStart=$HOME/.local/bin/omado|" "$HOME/.config/systemd/user/omado.service" 2>/dev/null || true
+        sed -i "s|Exec=/usr/bin/omado|Exec=$HOME/.local/bin/omado|" "$HOME/.local/share/dbus-1/services/io.omarchy.OmaDo.service" 2>/dev/null || true
         sed -i "s|Exec=omado|Exec=$HOME/.local/bin/omado|g" "$HOME/.local/share/applications/omado.desktop" 2>/dev/null || true
     fi
     # Clean up obsolete desktop autostart entry in favor of systemd user service

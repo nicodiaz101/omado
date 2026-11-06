@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
             quickAddInitialText = textParts.join(QLatin1Char(' '));
             break;
         } else if (arg == "--version" || arg == "-v") {
-            QTextStream(stdout) << "OmaDo v2.0.0 (Omarchy 4.5)" << Qt::endl;
+            QTextStream(stdout) << "OmaDo v2.0.1 (Omarchy 4.5)" << Qt::endl;
             return 0;
         } else if (arg == "--help" || arg == "-h") {
             QTextStream(stdout) << "Uso: omado [opciones] [comando]\n\n"
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
         QCoreApplication app(argc, argv);
         app.setOrganizationName("omacom-io");
         app.setApplicationName("OmaDo");
-        app.setApplicationVersion("2.0.0");
+        app.setApplicationVersion("2.0.1");
 
         Database db;
         if (!db.initialize()) {
@@ -101,7 +101,7 @@ int main(int argc, char *argv[])
         QCoreApplication app(argc, argv);
         app.setOrganizationName("omacom-io");
         app.setApplicationName("OmaDo");
-        app.setApplicationVersion("2.0.0");
+        app.setApplicationVersion("2.0.1");
 
         Database db;
         if (!db.initialize()) {
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setOrganizationName("omacom-io");
     app.setApplicationName("OmaDo");
-    app.setApplicationVersion("2.0.0");
+    app.setApplicationVersion("2.0.1");
     app.setDesktopFileName(QStringLiteral("omado"));
     QIcon appIcon = QIcon::fromTheme(QStringLiteral("omado"), QIcon(QStringLiteral(":/OmaDo/icons/omado.svg")));
     if (appIcon.isNull()) {

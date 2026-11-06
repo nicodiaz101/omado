@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=io.omarchy.OmaDo
+Exec=/usr/bin/omado --daemon
+SystemdService=omado.service

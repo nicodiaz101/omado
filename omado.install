@@ -1,0 +1,11 @@
+post_install() {
+    systemctl --global enable omado.service 2>/dev/null || true
+}
+
+post_upgrade() {
+    systemctl --global enable omado.service 2>/dev/null || true
+}
+
+pre_remove() {
+    systemctl --global disable omado.service 2>/dev/null || true
+}
