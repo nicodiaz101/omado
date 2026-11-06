@@ -14,6 +14,8 @@ set(TEST_TARGETS
     tst_TaskModel
     tst_TaskListModel
     tst_TaskInputParser
+    tst_Translator
+    tst_CliRunner
 )
 
 foreach(test_name ${TEST_TARGETS})

@@ -1,7 +1,10 @@
 # ROADMAP.md — Hitos de Desarrollo de OmaDo
 
-> **v1.0:** Gestor de tareas local completo (offline-first)
-> **v1.1:** Sincronización opcional con MS To Do + Plugin de panel Quickshell
+> **v1.0:** Gestor de tareas local completo (offline-first) + Sincronización opcional con MS To Do
+> **v1.1:** Plugin de panel Quickshell (`omado.panel`)
+> **v1.2:** Parser de Lenguaje Natural bilingüe + Filtros globales
+> **v1.3:** Personalización de listas (Emojis/Renombrado), Ordenamiento cronológico y Auditoría QA
+> **v2.0:** Integración profunda con **Omarchy 4.5** (Notificaciones interactivas Omapager, Mi Día inteligente con reprogramación de vencidas, NLP 2.0 + D-Bus, Multilenguaje en vivo, Dock flotante, Quick-Add y CLI)
 > **Convención:** 🔲 Pendiente · 🔄 En progreso · ✅ Completado
 
 ---
@@ -180,22 +183,22 @@
 > **Objetivo:** Plugin QML nativo para el panel de Omarchy que consume el D-Bus de OmaDo.
 > **Criterio de éxito:** El panel muestra badge con conteo de tareas del día. Clic abre popup
 > con lista de tareas marcables. Se actualiza reactivamente cuando el daemon emite `TodayTasksChanged`.
-> **Nota:** El plugin vive en su propio repositorio (omacom-io/omado-panel o similar).
+> **Nota:** El plugin vive en su propio repositorio (`omado-plugin` / `omado.panel`).
 
 ### 4.1 Plugin QML
-- 🔲 Crear repositorio separado `omado-panel`.
-- 🔲 `manifest.json` siguiendo estándar de plugins de Omarchy Quattro.
-- 🔲 Instalar en `~/.config/omarchy/plugins/omado/`.
-- 🔲 `QDBusInterface` a `io.omarchy.OmaDo` para `GetTotalPendingCount()` y `GetTasksForToday()`.
-- 🔲 Badge en panel: número de tareas pendientes del día.
-- 🔲 Popup al clic: `ListView` con tareas de hoy, checkbox funcional via `ToggleTask()`.
-- 🔲 Escuchar señal D-Bus `TodayTasksChanged` para refresh reactivo.
-- 🔲 Theming idéntico a OmaDo (mismas variables de `colors.toml`).
+- ✅ Crear repositorio separado `omado-plugin`.
+- ✅ `manifest.json` siguiendo estándar de plugins de Omarchy Quattro.
+- ✅ Instalar en `~/.config/omarchy/plugins/omado.panel/`.
+- ✅ Comunicación D-Bus con `io.omarchy.OmaDo` para `GetTotalPendingCount()` y `GetTasksForToday()`.
+- ✅ Badge en panel: número de tareas pendientes del día.
+- ✅ Popup al clic: `ListView` con tareas de hoy, checkbox funcional via `ToggleTask()`.
+- ✅ Escuchar señal D-Bus `TodayTasksChanged` para refresh reactivo.
+- ✅ Theming idéntico a OmaDo (mismas variables de `colors.toml`).
 
 ### 4.2 PKGBUILD Final
-- 🔲 `pkgbuild/PKGBUILD` con dependencias: `qt6-base`, `qtkeychain-qt6`.
-- 🔲 Instalar `.desktop` para autostart del daemon.
-- 🔲 `provides=('omado')`, `conflicts=('omado-git')`.
+- ✅ `PKGBUILD` con dependencias: `qt6-base`, `qt6-declarative`, `qt6-svg`, `qtkeychain-qt6`.
+- ✅ Instalar `.desktop` para autostart del daemon.
+- ✅ `provides=('omado')`, `conflicts=('omado')`.
 - ✅ `install.sh` y `PKGBUILD` configurados para versión 1.3.
 
 ---
@@ -222,6 +225,99 @@
 
 ---
 
+## Hito 7 — v2.0 (Parte 1): Motor de Notificaciones Interactivo de Omarchy 4.5 (Omapager)
+> **Objetivo:** Aprovechar al 100% el nuevo motor nativo `omarchy.notifications` (Omapager) de Omarchy 4.5 con botones de acción, niveles de urgencia, enlaces clicables y agrupación por aplicación.
+> **Criterio de éxito:** Un recordatorio disparado por `omado --daemon` muestra el icono de OmaDo, botones de acción *"Completar"* y *"Posponer 15 min"* funcionales sin abrir la ventana, resumen de subtareas y links clicables.
+
+### 7.1 `NotificationService` Extendido para Omarchy 4.5
+- ✅ Extender `NotificationService` con `NotificationOptions` (`iconName = "omado"`, `replacesId`, `urgency`, `transient`, `actions`) y método `sendNotification(title, body, actions, hints, iconName, timeoutMs)` que retorne el `uint notificationId` asignado por `org.freedesktop.Notifications`.
+- ✅ Incluir siempre `hints["desktop-entry"] = "omado"`, `hints["urgency"]` (`1` Normal o `2` Critical) y `hints["transient"]` (`false` para recordatorios persistentes, `true` para avisos efímeros).
+- ✅ Conectar señales D-Bus `ActionInvoked(uint id, QString actionKey)` y `NotificationClosed(uint id, uint reason)` de `org.freedesktop.Notifications` hacia señales propias de `NotificationService`.
+
+### 7.2 `ReminderService` Interactivo y Cuerpo Enriquecido
+- ✅ Mantener mapa `QHash<uint, QString> m_activeNotificationTasks` (`notificationId -> taskId`) en `ReminderService`.
+- ✅ Enviar acciones interactivas `["complete", "Completar", "snooze-15", "Posponer 15m"]` en cada recordatorio.
+- ✅ Al recibir `actionInvoked(id, "complete")`: marcar tarea completada en `LocalRepository`, emitir `reminderActionProcessed` y reflejar `TasksChanged` / `TodayTasksChanged`.
+- ✅ Al recibir `actionInvoked(id, "snooze-15")`: invocar `LocalRepository::snoozeTaskReminder(taskId, 15)` (`reminder_at = now + 15m`, `reminded = 0`) y emitir señales D-Bus.
+- ✅ Mapear `task.importance == "high"` a `urgency = 2` (`Critical`) en los hints de notificación.
+- ✅ Enriquecer el `body` de la notificación con subtareas pendientes (`"• Paso"`) y las notas (`task.body`), preservando URLs (`https://...`) para detección nativa en Omarchy 4.5.
+
+---
+
+## Hito 8 — v2.0 (Parte 2): "Mi Día" Inteligente (Reprogramación de Vencidas) y NLP 2.0 + D-Bus
+> **Objetivo:** Incorporar sugerencias inteligentes de tareas vencidas para "Mi Día" con reprogramación automática de fecha/hora, expandir el parser de lenguaje natural en C++ y exponerlo por D-Bus para `omado.panel` y CLI.
+> **Criterio de éxito:** Las tareas vencidas se sugieren en *My Day* y al aceptarlas actualizan su `due_date` a hoy y su `reminder_at` a hoy conservando la hora original (o `+1h` si ya pasó). `CreateTaskFromNaturalText` permite crear tareas con fecha, hora, `!` e `#Lista` vía D-Bus.
+
+### 8.1 Sugerencias de Tareas Vencidas y Reprogramación para "Mi Día"
+- ✅ Implementar `LocalRepository::fetchOverdueTasks()` (tareas incompletas con `due_date < hoy` o `reminder_at < hoy`).
+- ✅ Implementar `LocalRepository::rescheduleTaskForMyDay(taskId)`: setea `is_my_day = 1`, `due_date = hoy`, reprograma `reminder_at` y resetea `reminded = 0`.
+- ✅ Exponer `overdueSuggestions`, `overdueCount`, `loadOverdueSuggestions()` y `rescheduleForMyDay(taskId)` en `TaskModel`.
+- ✅ Crear `MyDaySuggestionsPopup.qml` e integrar botón de sugerencias en el encabezado de `TaskView.qml`.
+
+### 8.2 Parser de Lenguaje Natural Extendido (`TaskInputParser` 2.0) y Links en Notas
+- ✅ Extender `TaskParseResult` y `TaskInputParser::parse` para detectar y limpiar:
+  - Prioridad: `!` o `!!` → `importance = "high"`.
+  - Lista destino: `#NombreLista` o `#"Nombre Lista"` → `targetListName`.
+  - Recurrencia: `diario`, `semanal`, `mensual`, `anual`, `daily`, `weekly`, `monthly`, `yearly`.
+- ✅ Mostrar chips visuales en vivo en `InputBar.qml` para importancia, lista destino y recurrencia.
+- ✅ Detectar URLs (`https?://...`) en las notas de `TaskDetail.qml` y mostrar chips clicables con apertura externa.
+
+### 8.3 Expansión de `DaemonService` (`io.omarchy.OmaDo`) y Reactividad Bidireccional
+- ✅ Añadir métodos D-Bus en `DaemonService` y actualizar `io.omarchy.OmaDo.xml`:
+  - `CreateTaskFromNaturalText(QString rawInput, bool addToMyDay) -> QString`
+  - `PreviewNaturalText(QString rawInput) -> QString`
+  - `GetOverdueTasks() -> QString`
+  - `RescheduleTaskForMyDay(QString taskId) -> bool`
+  - `SnoozeTask(QString taskId, int minutes) -> bool`
+- ✅ Conectar la instancia GUI de OmaDo a las señales D-Bus `TasksChanged` y `TodayTasksChanged` del demonio para refresco automático sin recarga manual.
+
+---
+
+## Hito 9 — v2.0 (Parte 3): Multilenguaje en Vivo 4.5, Dock Flotante, Quick-Add y CLI
+> **Objetivo:** Integrar OmaDo con el selector de 50 idiomas de Omarchy 4.5 (`omarchy language`), el nuevo modo de Workspaces Flotantes + Dock (`Super + L` / `Super + M`), una ventana de captura rápida (`--quick-add`) y subcomandos CLI.
+> **Criterio de éxito:** Cambiar el idioma en Omarchy traduce OmaDo en vivo sin reiniciar; OmaDo se fija y minimiza correctamente en `omarchy.dock`; `omado --quick-add` y `omado add/list/done` funcionan instantáneamente.
+
+### 9.1 Soporte Multilenguaje en Vivo (`Translator` — Omarchy 4.5)
+- ✅ Implementar `Translator : public QTranslator` (`src/core/Translator.h/.cpp`) que observe `~/.config/omarchy/language` con `QFileSystemWatcher` y cargue catálogos JSON embebidos (`:/qt/qml/OmaDo/i18n/<code>.json`).
+- ✅ Conectar `Translator` con `QQmlEngine::retranslate()`.
+- ✅ Crear catálogos `i18n/en.json` e `i18n/es.json` listos para los 50 idiomas de Omarchy 4.5.
+
+### 9.2 Workspaces Flotantes (`hyprbars`), `omarchy.dock` y Modo `omado --quick-add`
+- ✅ Configurar `QGuiApplication::setDesktopFileName(QStringLiteral("omado"))` y `setWindowIcon(...)` en `main.cpp` para integración total con `omarchy.dock` y `hyprbars` (`−`, `□`, `×`).
+- ✅ Adaptar `Main.qml`: remover `Qt.FramelessWindowHint` y esquinas redondeadas internas duplicadas, fijando `minimumWidth: 640` y `minimumHeight: 460`.
+- ✅ Implementar flag `--quick-add` y componente `QuickAddWindow.qml`.
+- ✅ Añadir navegación por teclado estilo Vim (`j`/`k`, `Ctrl+1..3`, `?` con `ShortcutHelpOverlay.qml`).
+
+### 9.3 Subcomandos CLI (`CliRunner`)
+- ✅ Implementar `CliRunner` (`src/core/CliRunner.h/.cpp`):
+  - `omado add "<texto natural>" [--today]`
+  - `omado list [--today] [--json]`
+  - `omado done <taskId>`
+  - `omado reschedule <taskId>`
+
+---
+
+## Hito 10 — v2.0 (Parte 4): Suite de Tests Unitarios 2.0 y Empaquetado Multi-Arquitectura (`x86_64` + `aarch64`)
+> **Objetivo:** Garantizar cobertura total de tests unitarios para todas las features e integraciones de OmaDo 2.0 y preparar el lanzamiento multi-arquitectura junto a Omarchy 4.5 estable.
+> **Criterio de éxito:** 100% de tests pasando en `ctest` con aislamiento de datos (`QStandardPaths::setTestModeEnabled(true)`) y paquete compilable en `x86_64` y `aarch64`.
+
+### 10.1 Actualización y Nuevos Tests Unitarios
+- ✅ Aislar todas las suites existentes con `QStandardPaths::setTestModeEnabled(true)` para no tocar la DB de usuario.
+- ✅ Actualizar `tst_NotificationService.cpp`: probar envío avanzado, hints, acciones D-Bus y señales `actionInvoked` y `notificationClosed`.
+- ✅ Actualizar `tst_ReminderService.cpp`: probar recordatorios enriquecidos, acciones interactivas `complete` y `snooze-15` y persistencia en DB.
+- ✅ Actualizar `tst_LocalRepository.cpp` y `tst_TaskModel.cpp`: probar `fetchOverdueTasks()`, `rescheduleTaskForMyDay()` y `snoozeTaskReminder()`.
+- ✅ Actualizar `tst_TaskInputParser.cpp`: probar tokens 2.0 (`!`, `#Lista`, recurrencias en español e inglés).
+- ✅ Actualizar `tst_DaemonService.cpp`: probar `CreateTaskFromNaturalText`, `PreviewNaturalText`, `GetOverdueTasks`, `RescheduleTaskForMyDay` y `SnoozeTask`.
+- ✅ Crear `tst_Translator.cpp`: probar carga de JSON, fallbacks, watcher y emisión de señales.
+- ✅ Crear `tst_CliRunner.cpp`: probar comandos `add`, `list`, `done` y `reschedule`.
+
+### 10.2 Empaquetado v2.0.0 (`x86_64` + `aarch64`)
+- ✅ Actualizar versión a `2.0.0` en `CMakeLists.txt`, `main.cpp` y `PKGBUILD`.
+- ✅ Agregar soporte oficial ARM64 en `PKGBUILD`: `arch=('x86_64' 'aarch64')`.
+- ✅ Actualizar `omado.desktop` con traducciones en español y acción `QuickAdd`.
+
+---
+
 ## Tabla de Versiones
 
 | Versión | Hitos completados | Estado |
@@ -232,3 +328,4 @@
 | v1.1.0 | 4 (plugin de panel Quickshell) | ✅ |
 | v1.2.0 | 5 (parser NLP, filtro completadas, recordatorios en My Day) | ✅ |
 | v1.3.0 | 6 (personalización de listas, ordenamiento por vencimiento, QA & optimización RAM) | ✅ |
+| v2.0.0 | 7, 8, 9 y 10 (Integración Omarchy 4.5: Omapager interactivo, Mi Día inteligente, NLP 2.0, i18n en vivo, Dock/Quick-Add, CLI y soporte aarch64) | ✅ |

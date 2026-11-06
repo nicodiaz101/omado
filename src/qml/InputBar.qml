@@ -10,11 +10,17 @@ Rectangle {
     height: 46
     color: Theme.surface
 
+    property alias text: taskInput.text
+    property bool showActionButtons: true
+    property bool popupsOpenUpwards: true
+    readonly property bool isAnyPopupOpen: (datePicker.visible || timePicker.visible || recurrencePopup.visible || draftStepsPopup.visible)
     property string draftDueDate: ""
     property string draftReminderAt: ""
     property string draftRecurrence: "none"
     property var draftSteps: []
     property var parsedDraft: null
+
+    signal taskAdded()
 
     Timer {
         id: parseDebounceTimer
@@ -31,6 +37,7 @@ Rectangle {
 
     function focusInput() {
         taskInput.forceActiveFocus()
+        taskInput.cursorPosition = taskInput.text.length
     }
 
     Rectangle {
@@ -62,7 +69,7 @@ Rectangle {
             selectByMouse: true
 
             Text {
-                text: qsTr("Add a task...")
+                text: root.showActionButtons ? qsTr("Add a task...") : qsTr("Add task with natural language (e.g. Tomorrow 6pm #Work !)...")
                 color: Theme.foreground
                 opacity: 0.4
                 font.family: "iA Writer Mono"
@@ -91,6 +98,7 @@ Rectangle {
                     root.draftRecurrence = "none"
                     root.draftSteps = []
                     draftStepsPopup.draftSteps = []
+                    root.taskAdded()
                 }
             }
         }
@@ -98,7 +106,7 @@ Rectangle {
         // Active filters/draft badges preview
         Row {
             spacing: 6
-            visible: root.draftDueDate !== "" || root.draftReminderAt !== "" || root.draftRecurrence !== "none" || root.draftSteps.length > 0 || (root.parsedDraft !== null && root.parsedDraft !== undefined && (root.parsedDraft.hasDueDate || root.parsedDraft.hasReminder))
+            visible: root.draftDueDate !== "" || root.draftReminderAt !== "" || root.draftRecurrence !== "none" || root.draftSteps.length > 0 || (root.parsedDraft !== null && root.parsedDraft !== undefined && (root.parsedDraft.hasDueDate || root.parsedDraft.hasReminder || root.parsedDraft.hasImportance || root.parsedDraft.hasTargetList || root.parsedDraft.hasRecurrence))
 
             // Due date badge (manual)
             Rectangle {
@@ -233,10 +241,103 @@ Rectangle {
                     font.pixelSize: 10
                 }
             }
+
+            // Live parsed importance badge (!)
+            Rectangle {
+                visible: root.parsedDraft !== null && root.parsedDraft !== undefined && root.parsedDraft.hasImportance
+                height: 20
+                width: parsedImportanceRow.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
+
+                Row {
+                    id: parsedImportanceRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    AppIcon {
+                        name: "star-filled"
+                        size: 11
+                        color: Theme.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: qsTr("High")
+                        color: Theme.accent
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                        font.bold: true
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            // Live parsed target list badge (#Lista)
+            Rectangle {
+                visible: root.parsedDraft !== null && root.parsedDraft !== undefined && root.parsedDraft.hasTargetList
+                height: 20
+                width: parsedListRow.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+
+                Row {
+                    id: parsedListRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    AppIcon {
+                        name: "folder"
+                        size: 11
+                        color: Theme.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: (root.parsedDraft && root.parsedDraft.targetListName) ? root.parsedDraft.targetListName : ""
+                        color: Theme.accent
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            // Live parsed recurrence badge
+            Rectangle {
+                visible: root.draftRecurrence === "none" && root.parsedDraft !== null && root.parsedDraft !== undefined && root.parsedDraft.hasRecurrence
+                height: 20
+                width: parsedRecurrenceRow.implicitWidth + 12
+                radius: 10
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+
+                Row {
+                    id: parsedRecurrenceRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    AppIcon {
+                        name: "repeat"
+                        size: 11
+                        color: Theme.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: {
+                            if (!root.parsedDraft) return ""
+                            if (root.parsedDraft.recurrence === "daily") return qsTr("Daily")
+                            if (root.parsedDraft.recurrence === "weekly") return qsTr("Weekly")
+                            if (root.parsedDraft.recurrence === "monthly") return qsTr("Monthly")
+                            if (root.parsedDraft.recurrence === "yearly") return qsTr("Yearly")
+                            return root.parsedDraft.recurrence
+                        }
+                        color: Theme.accent
+                        font.family: "iA Writer Mono"
+                        font.pixelSize: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
         }
 
         // 4 Action Buttons with crisp SVG vector icons
         Row {
+            visible: root.showActionButtons
             spacing: 14
 
             // 1. Due Date (Calendar)
@@ -258,6 +359,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        timePicker.close()
+                        recurrencePopup.close()
+                        draftStepsPopup.close()
                         datePicker.open()
                     }
                 }
@@ -265,7 +369,7 @@ Rectangle {
                 DatePickerPopup {
                     id: datePicker
                     x: -width + parent.width
-                    y: -height - 8
+                    y: root.popupsOpenUpwards ? (-height - 8) : (parent.height + 8)
                     onDateSelected: function(iso) {
                         root.draftDueDate = iso
                     }
@@ -291,6 +395,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        datePicker.close()
+                        recurrencePopup.close()
+                        draftStepsPopup.close()
                         timePicker.open()
                     }
                 }
@@ -298,7 +405,7 @@ Rectangle {
                 TimePickerPopup {
                     id: timePicker
                     x: -width + parent.width
-                    y: -height - 8
+                    y: root.popupsOpenUpwards ? (-height - 8) : (parent.height + 8)
                     onTimeSelected: function(iso) {
                         root.draftReminderAt = iso
                     }
@@ -324,6 +431,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        datePicker.close()
+                        timePicker.close()
+                        draftStepsPopup.close()
                         recurrencePopup.open()
                     }
                 }
@@ -331,7 +441,7 @@ Rectangle {
                 RecurrencePopup {
                     id: recurrencePopup
                     x: -width + parent.width
-                    y: -height - 8
+                    y: root.popupsOpenUpwards ? (-height - 8) : (parent.height + 8)
                     onRecurrenceSelected: function(rec) {
                         root.draftRecurrence = rec
                     }
@@ -357,6 +467,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        datePicker.close()
+                        timePicker.close()
+                        recurrencePopup.close()
                         draftStepsPopup.open()
                     }
                 }
@@ -364,7 +477,7 @@ Rectangle {
                 DraftStepsPopup {
                     id: draftStepsPopup
                     x: -width + parent.width
-                    y: -height - 8
+                    y: root.popupsOpenUpwards ? (-height - 8) : (parent.height + 8)
                     onStepsChanged: function(newSteps) {
                         root.draftSteps = newSteps
                     }

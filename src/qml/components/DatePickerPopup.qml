@@ -25,11 +25,23 @@ Popup {
     property int currentMonth: displayDate.getMonth()
     property int currentYear: displayDate.getFullYear()
 
-    readonly property var monthNames: [
-        qsTr("January"), qsTr("February"), qsTr("March"), qsTr("April"),
-        qsTr("May"), qsTr("June"), qsTr("July"), qsTr("August"),
-        qsTr("September"), qsTr("October"), qsTr("November"), qsTr("December")
-    ]
+    function getMonthName(monthIndex) {
+        switch (monthIndex) {
+        case 0: return qsTr("January")
+        case 1: return qsTr("February")
+        case 2: return qsTr("March")
+        case 3: return qsTr("April")
+        case 4: return qsTr("May")
+        case 5: return qsTr("June")
+        case 6: return qsTr("July")
+        case 7: return qsTr("August")
+        case 8: return qsTr("September")
+        case 9: return qsTr("October")
+        case 10: return qsTr("November")
+        case 11: return qsTr("December")
+        default: return ""
+        }
+    }
 
     function getDaysInMonth(year, month) {
         return new Date(year, month + 1, 0).getDate()
@@ -70,7 +82,7 @@ Popup {
             Text {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
-                text: root.monthNames[root.currentMonth] + " " + root.currentYear
+                text: root.getMonthName(root.currentMonth) + " " + root.currentYear
                 color: Theme.foreground
                 font.family: "iA Writer Mono"
                 font.pixelSize: 13

@@ -206,6 +206,58 @@ private slots:
         // Limpieza
         m_repo->deleteList(list.id).result();
     }
+
+    void testOverdueSuggestionsAndRescheduleForMyDay() {
+        TaskList list = m_repo->createList("Lista Overdue Suggestions").result();
+
+        Task overdueTask;
+        overdueTask.listId = list.id;
+        overdueTask.title = "Tarea vencida para My Day";
+        overdueTask.dueDate = QDate::currentDate().addDays(-2);
+        overdueTask.isCompleted = false;
+        Task created = m_repo->createTask(overdueTask).result();
+
+        TaskModel model(m_repo);
+        QSignalSpy overdueCountSpy(&model, &TaskModel::overdueCountChanged);
+        QSignalSpy overdueSuggestionsSpy(&model, &TaskModel::overdueSuggestionsChanged);
+
+        model.setCurrentListId("special-myday");
+        QTRY_VERIFY(model.overdueCount() > 0);
+        QVERIFY(overdueCountSpy.count() >= 1);
+
+        QVariantList suggestions = model.overdueSuggestions();
+        bool found = false;
+        for (const auto &v : suggestions) {
+            QVariantMap m = v.toMap();
+            if (m["id"].toString() == created.id) {
+                found = true;
+                QCOMPARE(m["title"].toString(), QStringLiteral("Tarea vencida para My Day"));
+                QCOMPARE(m["dueDate"].toString(), QDate::currentDate().addDays(-2).toString(Qt::ISODate));
+                break;
+            }
+        }
+        QVERIFY(found);
+
+        // Reprogramar para My Day
+        model.rescheduleForMyDay(created.id);
+
+        // Esperar a que la tarea se mueva a My Day y se actualice
+        QTRY_VERIFY(model.rowCount() >= 1);
+        bool inMyDay = false;
+        for (int i = 0; i < model.rowCount(); ++i) {
+            if (model.data(model.index(i, 0), TaskModel::IdRole).toString() == created.id) {
+                inMyDay = true;
+                QCOMPARE(model.data(model.index(i, 0), TaskModel::IsMyDayRole).toBool(), true);
+                QCOMPARE(model.data(model.index(i, 0), TaskModel::DueDateRole).toDate(), QDate::currentDate());
+                break;
+            }
+        }
+        QVERIFY(inMyDay);
+
+        // Limpieza
+        m_repo->deleteTask(created.id).result();
+        m_repo->deleteList(list.id).result();
+    }
 };
 
 QTEST_MAIN(tst_TaskModel)

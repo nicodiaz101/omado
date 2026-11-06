@@ -13,6 +13,8 @@ class TaskModel : public QAbstractListModel {
     Q_PROPERTY(int selectedIndex READ selectedIndex WRITE setSelectedIndex NOTIFY selectedIndexChanged)
     Q_PROPERTY(QVariantMap selectedTask READ selectedTask NOTIFY selectedTaskChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    Q_PROPERTY(int overdueCount READ overdueCount NOTIFY overdueCountChanged)
+    Q_PROPERTY(QVariantList overdueSuggestions READ overdueSuggestions NOTIFY overdueSuggestionsChanged)
     Q_PROPERTY(bool hideCompleted READ hideCompleted WRITE setHideCompleted NOTIFY hideCompletedChanged)
     Q_PROPERTY(bool sortByDueDate READ sortByDueDate WRITE setSortByDueDate NOTIFY sortByDueDateChanged)
 
@@ -51,13 +53,22 @@ public:
 
     QVariantMap selectedTask() const;
 
+    int overdueCount() const { return m_overdueTasks.count(); }
+    QVariantList overdueSuggestions() const;
+    Q_INVOKABLE void rescheduleForMyDay(const QString &taskId);
+
     bool hideCompleted() const { return m_hideCompleted; }
     void setHideCompleted(bool hide);
 
     bool sortByDueDate() const { return m_sortByDueDate; }
     void setSortByDueDate(bool sort);
 
-    Q_INVOKABLE void loadTasks();
+public slots:
+    void loadTasks();
+    void loadOverdueSuggestions();
+
+public:
+    void resetPreservingSelection(const std::function<void()> &mutation = nullptr);
     Q_INVOKABLE QVariantMap parseInput(const QString &text) const;
     Q_INVOKABLE void addTask(const QString &title, const QString &dueDate = "", const QString &reminderAt = "", const QString &recurrence = "none");
     Q_INVOKABLE void addTaskWithSteps(const QString &title, const QString &dueDate, const QString &reminderAt, const QString &recurrence, const QStringList &steps);
@@ -73,12 +84,20 @@ public:
     Q_INVOKABLE void addStep(int row, const QString &stepTitle);
     Q_INVOKABLE void toggleStep(int row, int stepIndex);
     Q_INVOKABLE void deleteStep(int row, int stepIndex);
+
+    Q_INVOKABLE void launchOmarchyAgent(const QString &prompt = QString());
+    Q_INVOKABLE bool configureHyprlandShortcut(const QString &shortcut = QStringLiteral("SUPER + ALT + T"));
+    Q_INVOKABLE bool isHyprlandShortcutConfigured() const;
+    Q_INVOKABLE QString configuredHyprlandShortcut() const;
+    Q_INVOKABLE void copyToClipboard(const QString &text);
     
 signals:
     void currentListIdChanged();
     void selectedIndexChanged();
     void selectedTaskChanged();
     void countChanged();
+    void overdueCountChanged();
+    void overdueSuggestionsChanged();
     void hideCompletedChanged();
     void sortByDueDateChanged();
 
@@ -91,10 +110,15 @@ private:
     bool m_hideCompleted = false;
     bool m_sortByDueDate = false;
     QList<Task> m_tasks;
+    QList<Task> m_overdueTasks;
     QList<int> m_visibleIndices;
     QFutureWatcher<QList<Task>> m_watcher;
+    QFutureWatcher<QList<Task>> m_overdueWatcher;
+    QFutureWatcher<QList<TaskList>> m_listsWatcher;
+    QList<TaskList> m_cachedLists;
 
     void rebuildVisibleIndices();
     int actualIndex(int row) const;
     void notifyRowChanged(int row);
+    void notifyDBusChange(const QString &listId, bool isToday = true);
 };

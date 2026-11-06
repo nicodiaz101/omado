@@ -26,13 +26,13 @@ public:
     void fetchTasks(const QString &remoteListId, std::function<void(bool success, const QJsonArray &tasks, const QString &error)> callback);
     void createTask(const QString &remoteListId, const Task &task, std::function<void(bool success, const QJsonObject &taskObj, const QString &error)> callback);
     void updateTask(const QString &remoteListId, const Task &task, std::function<void(bool success, const QString &error)> callback);
-    void deleteTask(const QString &remoteListId, const QString &remoteTaskId, std::function<void(bool success, const QString &error)> callback);
+    void deleteTask(const QString &remoteListId, const QString &remoteTaskId, std::function<void(bool success, int statusCode, const QString &error)> callback);
 
     // Subtareas (Checklist Items)
     void fetchSteps(const QString &remoteListId, const QString &remoteTaskId, std::function<void(bool success, const QJsonArray &steps, const QString &error)> callback);
     void createStep(const QString &remoteListId, const QString &remoteTaskId, const TaskStep &step, std::function<void(bool success, const QJsonObject &stepObj, const QString &error)> callback);
     void updateStep(const QString &remoteListId, const QString &remoteTaskId, const QString &remoteStepId, const TaskStep &step, std::function<void(bool success, const QString &error)> callback);
-    void deleteStep(const QString &remoteListId, const QString &remoteTaskId, const QString &remoteStepId, std::function<void(bool success, const QString &error)> callback);
+    void deleteStep(const QString &remoteListId, const QString &remoteTaskId, const QString &remoteStepId, std::function<void(bool success, int statusCode, const QString &error)> callback);
 
     static QJsonObject taskToJson(const Task &task);
 
@@ -41,7 +41,8 @@ signals:
 
 private:
     void sendAuthorizedRequest(const QString &method, const QString &endpoint, const QByteArray &data,
-                               std::function<void(bool success, int statusCode, const QByteArray &response, const QString &error)> callback);
+                               std::function<void(bool success, int statusCode, const QByteArray &response, const QString &error)> callback,
+                               int retryCount = 0);
     QNetworkAccessManager *networkAccessManager();
 
     AuthManager            *m_auth = nullptr;

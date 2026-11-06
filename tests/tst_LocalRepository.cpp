@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QStandardPaths>
 #include "core/Database.h"
 #include "models/LocalRepository.h"
 
@@ -11,6 +12,7 @@ private:
 
 private slots:
     void initTestCase() {
+        QStandardPaths::setTestModeEnabled(true);
         m_db = new Database(this);
         QVERIFY(m_db->initialize());
         m_repo = new LocalRepository(this);
@@ -305,6 +307,93 @@ private slots:
         // Limpieza
         m_repo->deleteTask(createdToday.id).result();
         m_repo->deleteTask(createdTomorrow.id).result();
+        m_repo->deleteList(list.id).result();
+    }
+
+    void testSnoozeAndRescheduleOverdue() {
+        TaskList list = m_repo->createList("Overdue List").result();
+
+        // 1. Crear tarea vencida
+        Task overdueTask;
+        overdueTask.listId = list.id;
+        overdueTask.title = "Tarea vencida ayer";
+        overdueTask.dueDate = QDate::currentDate().addDays(-1);
+        overdueTask.reminderAt = QDateTime::currentDateTime().addDays(-1);
+        overdueTask.isCompleted = false;
+        overdueTask.reminded = true;
+
+        Task created = m_repo->createTask(overdueTask).result();
+        QVERIFY(!created.id.isEmpty());
+
+        // Verificar fetchOverdueTasks
+        QList<Task> overdueList = m_repo->fetchOverdueTasks().result();
+        bool found = false;
+        for (const Task &t : overdueList) {
+            if (t.id == created.id) found = true;
+        }
+        QVERIFY(found);
+
+        // Probar snoozeTaskReminder
+        bool snoozeOk = m_repo->snoozeTaskReminder(created.id, 20).result();
+        QVERIFY(snoozeOk);
+        Task snoozed = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(snoozed.reminded, false);
+        QVERIFY(snoozed.reminderAt > QDateTime::currentDateTime().addSecs(15 * 60));
+
+        // Probar rescheduleTaskForMyDay
+        bool reschedOk = m_repo->rescheduleTaskForMyDay(created.id).result();
+        QVERIFY(reschedOk);
+        Task rescheduled = m_repo->fetchTaskById(created.id).result();
+        QCOMPARE(rescheduled.isMyDay, true);
+        QCOMPARE(rescheduled.dueDate, QDate::currentDate());
+        QCOMPARE(rescheduled.reminded, false);
+
+        // Limpieza
+        m_repo->deleteTask(created.id).result();
+        m_repo->deleteList(list.id).result();
+    }
+
+    void testSubtaskRemoteSync() {
+        TaskList list = m_repo->createList("Lista Subtask Sync").result();
+        m_repo->updateListRemoteId(list.id, "remote-list-xyz").result();
+
+        Task t;
+        t.listId = list.id;
+        t.title = "Tarea Sync Steps";
+        Task createdTask = m_repo->createTask(t).result();
+        m_repo->updateTaskRemoteId(createdTask.id, "remote-task-123").result();
+
+        // 1. Upsert remote step
+        TaskStep rStep;
+        rStep.remoteId = "remote-step-abc";
+        rStep.title = "Paso Remoto Inicial";
+        rStep.isCompleted = false;
+        TaskStep upserted = m_repo->upsertRemoteStep(createdTask.id, rStep).result();
+        QCOMPARE(upserted.remoteId, QStringLiteral("remote-step-abc"));
+        QCOMPARE(upserted.title, QStringLiteral("Paso Remoto Inicial"));
+
+        // 2. Fetch steps for task
+        QList<TaskStep> steps = m_repo->fetchStepsForTask(createdTask.id).result();
+        QCOMPARE(steps.size(), 1);
+        QCOMPARE(steps[0].remoteId, QStringLiteral("remote-step-abc"));
+
+        // 3. Delete step with tracking
+        bool delOk = m_repo->deleteStep(upserted.id, true).result();
+        QVERIFY(delOk);
+
+        // 4. Verify deleted steps
+        auto delSteps = m_repo->fetchDeletedSteps().result();
+        bool foundDel = false;
+        for (const auto &ds : delSteps) {
+            if (ds.remoteId == "remote-step-abc") {
+                foundDel = true;
+                m_repo->removeDeletedStepRecord(ds.id).result();
+                break;
+            }
+        }
+        QVERIFY(foundDel);
+
+        m_repo->deleteTask(createdTask.id, false).result();
         m_repo->deleteList(list.id).result();
     }
 };

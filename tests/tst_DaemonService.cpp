@@ -1,7 +1,9 @@
 #include <QtTest>
 #include <QSignalSpy>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QJsonArray>
+#include <QStandardPaths>
 #include "core/Database.h"
 #include "core/DaemonService.h"
 #include "models/LocalRepository.h"
@@ -16,6 +18,7 @@ private:
 
 private slots:
     void initTestCase() {
+        QStandardPaths::setTestModeEnabled(true);
         m_db = new Database(this);
         QVERIFY(m_db->initialize());
         m_repo = new LocalRepository(this);
@@ -146,6 +149,60 @@ private slots:
         QVERIFY(fetched.id.isEmpty());
 
         m_repo->deleteList(list.id).result();
+    }
+
+    void testOmarchy45Extensions() {
+        // 1. Preview natural text
+        QString previewJson = m_daemon->PreviewNaturalText("Comprar leche mañana 16:00 #Supermercado !");
+        QVERIFY(!previewJson.isEmpty());
+        QJsonDocument doc = QJsonDocument::fromJson(previewJson.toUtf8());
+        QVERIFY(doc.isObject());
+        QJsonObject obj = doc.object();
+        QCOMPARE(obj.value("cleanTitle").toString(), QStringLiteral("Comprar leche"));
+        QCOMPARE(obj.value("targetListName").toString(), QStringLiteral("Supermercado"));
+        QCOMPARE(obj.value("importance").toString(), QStringLiteral("high"));
+        QCOMPARE(obj.value("hasDueDate").toBool(), true);
+        QCOMPARE(obj.value("hasReminder").toBool(), true);
+
+        // 2. Create task from natural text via D-Bus
+        QSignalSpy spyTasksChanged(m_daemon, &DaemonService::TasksChanged);
+        QSignalSpy spyTodayTasksChanged(m_daemon, &DaemonService::TodayTasksChanged);
+
+        QString taskId = m_daemon->CreateTaskFromNaturalText("Entregar reporte urgente hoy 17:00 #\"Reportes Trimestrales\" !!", true);
+        QVERIFY(!taskId.isEmpty());
+        QVERIFY(spyTasksChanged.count() >= 1);
+        QVERIFY(spyTodayTasksChanged.count() >= 1);
+
+        Task created = m_repo->fetchTaskById(taskId).result();
+        QCOMPARE(created.title, QStringLiteral("Entregar reporte urgente"));
+        QCOMPARE(created.importance, QStringLiteral("high"));
+        QCOMPARE(created.isMyDay, true);
+
+        // 3. SnoozeTask
+        bool snoozeOk = m_daemon->SnoozeTask(taskId, 30);
+        QVERIFY(snoozeOk);
+        Task snoozed = m_repo->fetchTaskById(taskId).result();
+        QVERIFY(snoozed.reminderAt > QDateTime::currentDateTime().addSecs(20 * 60));
+
+        // 4. GetOverdueTasks & RescheduleTaskForMyDay
+        // Marcar tarea vencida
+        created.dueDate = QDate::currentDate().addDays(-2);
+        created.isMyDay = false;
+        m_repo->updateTask(created).result();
+
+        QString overdueJson = m_daemon->GetOverdueTasks();
+        QVERIFY(overdueJson.contains(taskId));
+
+        bool reschedOk = m_daemon->RescheduleTaskForMyDay(taskId);
+        QVERIFY(reschedOk);
+
+        Task rescheduled = m_repo->fetchTaskById(taskId).result();
+        QCOMPARE(rescheduled.isMyDay, true);
+        QCOMPARE(rescheduled.dueDate, QDate::currentDate());
+
+        // Limpieza
+        m_repo->deleteTask(taskId).result();
+        m_repo->deleteList(created.listId).result();
     }
 };
 

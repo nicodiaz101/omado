@@ -13,6 +13,7 @@ class ThemeReader : public QObject {
     Q_PROPERTY(QColor surface READ surface NOTIFY themeChanged)
     Q_PROPERTY(QColor border READ border NOTIFY themeChanged)
     Q_PROPERTY(QColor error READ error NOTIFY themeChanged)
+    Q_PROPERTY(QColor subtext READ subtext NOTIFY themeChanged)
 
 public:
     explicit ThemeReader(QObject *parent = nullptr);
@@ -26,13 +27,13 @@ public:
     QColor surface() const { return m_surface; }
     QColor border() const { return m_border; }
     QColor error() const { return m_error; }
+    QColor subtext() const { return m_subtext; }
 
 signals:
     void themeChanged();
 
 private:
     void loadTheme();
-    void parseTomlLine(const QString &line);
     
     QColor m_background{"#1a1a2e"};
     QColor m_foreground{"#e0e0e0"};
@@ -40,6 +41,7 @@ private:
     QColor m_surface{"#16213e"};
     QColor m_border{"#2a2a4a"};
     QColor m_error{"#f7768e"};
+    QColor m_subtext{"#a0a0a0"};
     
     QFileSystemWatcher m_watcher;
     QTimer m_debounceTimer;

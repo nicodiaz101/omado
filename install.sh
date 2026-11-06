@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-VERSION="1.3"
+VERSION="2.0.0"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -43,21 +43,43 @@ cmake --build . -j$(nproc)
 echo -e "\n${GREEN}==>${NC} Instalando en el sistema..."
 if [ "$EUID" -eq 0 ]; then
     cmake --install . --prefix /usr/local
+    mkdir -p /etc/systemd/user
+    cp ../systemd/omado.service /etc/systemd/user/omado.service 2>/dev/null || true
+    sed -i "s|ExecStart=/usr/bin/omado|ExecStart=/usr/local/bin/omado|" /etc/systemd/user/omado.service 2>/dev/null || true
+    rm -f /etc/xdg/autostart/omado-daemon.desktop
+    rm -f /usr/share/applications/omado-daemon.desktop
+    rm -f /usr/local/share/applications/omado-daemon.desktop
 else
     cmake --install . --prefix "$HOME/.local"
-    # Ensure systemd user service directory exists
+    # Ensure local data directory and systemd user service directory exist
+    mkdir -p "$HOME/.local/share/omacom-io"
     mkdir -p "$HOME/.config/systemd/user"
     cp ../systemd/omado.service "$HOME/.config/systemd/user/" 2>/dev/null || true
     if [ -f "$HOME/.local/bin/omado" ]; then
         sed -i "s|ExecStart=/usr/bin/omado|ExecStart=$HOME/.local/bin/omado|" "$HOME/.config/systemd/user/omado.service" 2>/dev/null || true
+        sed -i "s|Exec=omado|Exec=$HOME/.local/bin/omado|g" "$HOME/.local/share/applications/omado.desktop" 2>/dev/null || true
     fi
-fi
+    # Clean up obsolete desktop autostart entry in favor of systemd user service
+    rm -f "$HOME/.config/autostart/omado-daemon.desktop"
+    rm -f "$HOME/.local/share/applications/omado-daemon.desktop"
 
-# Clean up obsolete daemon shortcut from application launcher if present
-rm -f "$HOME/.local/share/applications/omado-daemon.desktop"
-if [ "$EUID" -eq 0 ]; then
-    rm -f /usr/share/applications/omado-daemon.desktop
-    rm -f /usr/local/share/applications/omado-daemon.desktop
+    # Reload and start systemd user service
+    if command -v systemctl &> /dev/null; then
+        systemctl --user daemon-reload 2>/dev/null || true
+        systemctl --user enable --now omado.service 2>/dev/null || true
+        echo -e "${GREEN}✓ Servicio systemd de usuario (omado.service) activado.${NC}"
+    fi
+
+    # Configure Hyprland floating window rule if Omarchy/Hyprland config exists
+    if [ -f "$HOME/.config/hypr/hyprland.lua" ]; then
+        if ! grep -q "OmaDo Quick Add" "$HOME/.config/hypr/hyprland.lua"; then
+            echo -e '\n-- OmaDo Quick Add floating overlay\no.window({ title = "OmaDo Quick Add" }, { float = true, center = true, pin = true })' >> "$HOME/.config/hypr/hyprland.lua"
+            if command -v hyprctl &>/dev/null; then
+                hyprctl reload &>/dev/null || true
+            fi
+            echo -e "${GREEN}✓ Regla de ventana flotante para Hyprland configurada en ~/.config/hypr/hyprland.lua.${NC}"
+        fi
+    fi
 fi
 
 echo -e "\n${GREEN}✓ ¡OmaDo v${VERSION} se instaló correctamente!${NC}"

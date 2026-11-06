@@ -20,6 +20,7 @@ public:
     QFuture<QList<Task>> fetchAllTasks();
 
     QFuture<TaskList> createList(const QString &name);
+    QFuture<TaskList> createList(const TaskList &list);
     QFuture<bool> updateList(const TaskList &list);
     QFuture<bool> deleteList(const QString &id);
 
@@ -29,10 +30,15 @@ public:
     QFuture<Task> fetchTaskById(const QString &id);
     QFuture<bool> toggleTask(const QString &taskId, bool completed);
     QFuture<bool> markReminded(const QString &taskId, bool reminded = true);
+    QFuture<bool> snoozeTaskReminder(const QString &taskId, int minutes = 15);
+    QFuture<bool> rescheduleTaskForMyDay(const QString &taskId);
+    QFuture<QList<Task>> fetchOverdueTasks();
 
     QFuture<TaskStep> addStep(const QString &taskId, const QString &title);
+    QFuture<TaskStep> addStep(const TaskStep &step);
     QFuture<bool> updateStep(const TaskStep &step);
-    QFuture<bool> deleteStep(const QString &stepId);
+    QFuture<bool> deleteStep(const QString &stepId, bool recordForRemoteSync = true);
+    QFuture<QList<TaskStep>> fetchStepsForTask(const QString &taskId);
 
     QFuture<int> getPendingCount(const QString &listId);
     QFuture<int> getTotalPendingCount();
@@ -42,6 +48,14 @@ public:
     struct DeletedTaskRecord {
         QString id;
         QString remoteId;
+        QString listRemoteId;
+    };
+
+    struct DeletedStepRecord {
+        QString id;
+        QString taskId;
+        QString remoteId;
+        QString taskRemoteId;
         QString listRemoteId;
     };
 
@@ -57,7 +71,14 @@ public:
     QFuture<TaskList> upsertRemoteList(const QString &remoteId, const QString &displayName);
     QFuture<Task> upsertRemoteTask(const QString &localListId, const Task &task);
 
+    // Subtasks remote sync
+    QFuture<bool> updateStepRemoteId(const QString &stepId, const QString &remoteId);
+    QFuture<bool> markStepSynced(const QString &stepId);
+    QFuture<TaskStep> upsertRemoteStep(const QString &taskId, const TaskStep &step);
+    QFuture<bool> deleteStepByRemoteId(const QString &taskId, const QString &remoteStepId);
+    QFuture<QList<DeletedStepRecord>> fetchDeletedSteps();
+    QFuture<bool> removeDeletedStepRecord(const QString &id);
+
 private:
     QThreadPool m_threadPool;
 };
-

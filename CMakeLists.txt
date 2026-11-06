@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(omado VERSION 1.3.0 LANGUAGES CXX)
+project(omado VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,10 +7,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wall -Wextra -fstack-protector-strong -Wformat -Wformat-security)
+    add_compile_definitions(_FORTIFY_SOURCE=2)
+    add_link_options(-Wl,-z,relro -Wl,-z,now)
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Sql DBus Concurrent)
 find_package(Qt6Keychain REQUIRED)
 
-# Librería estática interna para compartir con tests
 add_library(omado_lib STATIC
     src/core/ThemeReader.cpp
     src/core/Database.cpp
@@ -25,6 +30,16 @@ add_library(omado_lib STATIC
     src/models/TaskListModel.cpp
     src/models/TaskModel.cpp
     src/core/TaskInputParser.cpp
+    src/core/Translator.cpp
+    src/core/CliRunner.cpp
+)
+
+qt_add_resources(omado_lib "omado_i18n"
+    PREFIX "/qt/qml/OmaDo/i18n"
+    BASE "src/i18n"
+    FILES
+        src/i18n/en.json
+        src/i18n/es.json
 )
 target_include_directories(omado_lib PUBLIC src/)
 target_link_libraries(omado_lib PUBLIC
@@ -44,6 +59,7 @@ qt_add_qml_module(omado
         src/qml/TaskDetail.qml
         src/qml/InputBar.qml
         src/qml/TaskDelegate.qml
+        src/qml/QuickAddWindow.qml
         src/qml/components/AppIcon.qml
         src/qml/components/CheckCircle.qml
         src/qml/components/SectionSeparator.qml
@@ -54,6 +70,9 @@ qt_add_qml_module(omado
         src/qml/components/ListContextMenu.qml
         src/qml/components/ListIconPickerPopup.qml
         src/qml/components/ListRenameDialog.qml
+        src/qml/components/MyDaySuggestionsPopup.qml
+        src/qml/components/ShortcutHelpOverlay.qml
+        src/qml/components/QuickAddGuideDialog.qml
     RESOURCES
         fonts/iAWriterMono-Regular.ttf
         fonts/iAWriterMono-Bold.ttf
@@ -63,11 +82,14 @@ qt_add_qml_module(omado
         icons/close.svg
         icons/eye.svg
         icons/eye-off.svg
+        icons/folder.svg
         icons/list.svg
         icons/omado.svg
         icons/plus.svg
         icons/repeat.svg
+        icons/sparkles.svg
         icons/star.svg
+        icons/star-filled.svg
         icons/steps.svg
         icons/sun.svg
         icons/tasks.svg
@@ -81,8 +103,8 @@ include(GNUInstallDirs)
 install(TARGETS omado RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES icons/omado.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 install(FILES omado.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES autostart/omado-daemon.desktop DESTINATION /etc/xdg/autostart OPTIONAL)
 install(FILES systemd/omado.service DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/user OPTIONAL)
+install(FILES io.omarchy.OmaDo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/interfaces OPTIONAL)
 
 option(BUILD_TESTING "Build the testing tree." ON)
 if(BUILD_TESTING)

@@ -197,6 +197,70 @@ private slots:
             QVERIFY(res.hasReminder);
         }
     }
+
+    void testTokens20() {
+        QDateTime fixedNow(QDate(2026, 9, 9), QTime(10, 0));
+
+        // 1. Tarea con prioridad alta (! o !!)
+        {
+            auto res = TaskInputParser::parse("Entregar informe urgente !", fixedNow);
+            QCOMPARE(res.cleanTitle, QStringLiteral("Entregar informe urgente"));
+            QVERIFY(res.hasImportance);
+            QCOMPARE(res.importance, QStringLiteral("high"));
+        }
+
+        {
+            auto res = TaskInputParser::parse("Deploy critical fix !! tomorrow 15:00", fixedNow);
+            QCOMPARE(res.cleanTitle, QStringLiteral("Deploy critical fix"));
+            QVERIFY(res.hasImportance);
+            QCOMPARE(res.importance, QStringLiteral("high"));
+            QVERIFY(res.hasDueDate);
+            QCOMPARE(res.dueDate, QDate(2026, 9, 10));
+            QVERIFY(res.hasReminder);
+            QCOMPARE(res.reminderAt, QDateTime(QDate(2026, 9, 10), QTime(15, 0)));
+        }
+
+        // 2. Tarea con lista destino (#Trabajo o #"Lista con espacios")
+        {
+            auto res = TaskInputParser::parse("Comprar café #Supermercado", fixedNow);
+            QCOMPARE(res.cleanTitle, QStringLiteral("Comprar café"));
+            QVERIFY(res.hasTargetList);
+            QCOMPARE(res.targetListName, QStringLiteral("Supermercado"));
+        }
+
+        {
+            auto res = TaskInputParser::parse(QString::fromUtf8("Revisar PR #\"Omarchy Shell\" hoy 18:00 !"), fixedNow);
+            QCOMPARE(res.cleanTitle, QStringLiteral("Revisar PR"));
+            QVERIFY(res.hasTargetList);
+            QCOMPARE(res.targetListName, QStringLiteral("Omarchy Shell"));
+            QVERIFY(res.hasImportance);
+            QVERIFY(res.hasDueDate);
+            QCOMPARE(res.dueDate, QDate(2026, 9, 9));
+            QVERIFY(res.hasReminder);
+            QCOMPARE(res.reminderAt, QDateTime(QDate(2026, 9, 9), QTime(18, 0)));
+        }
+
+        // 3. Tarea con recurrencia (diario, weekly, monthly, etc.)
+        {
+            auto res = TaskInputParser::parse("Sincronización a las 10am diario #Trabajo", fixedNow);
+            QCOMPARE(res.cleanTitle, QStringLiteral("Sincronización"));
+            QVERIFY(res.hasRecurrence);
+            QCOMPARE(res.recurrence, QStringLiteral("daily"));
+            QVERIFY(res.hasTargetList);
+            QCOMPARE(res.targetListName, QStringLiteral("Trabajo"));
+            QVERIFY(res.hasReminder);
+            QCOMPARE(res.reminderAt.time(), QTime(10, 0));
+        }
+
+        {
+            auto res = TaskInputParser::parse("Pay rent every month on 05/10", fixedNow);
+            QCOMPARE(res.cleanTitle, QStringLiteral("Pay rent"));
+            QVERIFY(res.hasRecurrence);
+            QCOMPARE(res.recurrence, QStringLiteral("monthly"));
+            QVERIFY(res.hasDueDate);
+            QCOMPARE(res.dueDate, QDate(2026, 10, 5));
+        }
+    }
 };
 
 QTEST_MAIN(tst_TaskInputParser)

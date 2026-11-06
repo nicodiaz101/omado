@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QNetworkAccessManager>
 #include <QTcpServer>
+#include <QTimer>
 #include <functional>
 #include "KeychainStore.h"
 
@@ -32,6 +33,7 @@ public:
     Q_INVOKABLE void checkSavedCredentials(std::function<void(bool success)> callback = nullptr);
 
     void ensureValidToken(std::function<void(const QString &accessToken, bool success)> callback);
+    void refreshAccessToken(std::function<void(bool success)> callback = nullptr);
     QNetworkAccessManager *networkAccessManager();
 
     static QString generateCodeVerifier();
@@ -49,7 +51,6 @@ private slots:
 
 private:
     void exchangeCodeForTokens(const QString &code, const QString &redirectUri);
-    void refreshAccessToken(std::function<void(bool success)> callback = nullptr);
     void fetchUserProfile();
     void stopLocalServer();
 
@@ -68,6 +69,9 @@ private:
 
     bool                    m_isAuthenticated = false;
     bool                    m_isAuthenticating = false;
+    bool                    m_isRefreshingToken = false;
+    QList<std::function<void(bool success)>> m_refreshWaiters;
+    QTimer                 *m_oauthTimeoutTimer = nullptr;
 
     static constexpr const char *kDefaultClientId = "ae0de121-412b-438c-a604-6614b1d28ab3";
     static constexpr const char *kAuthEndpoint    = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";

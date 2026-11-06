@@ -48,6 +48,7 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 text: model.title
+                textFormat: Text.PlainText
                 color: root.isCompleted ? Theme.border : Theme.foreground
                 font.family: "iA Writer Mono"
                 font.pixelSize: 13

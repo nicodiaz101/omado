@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls.impl
+import QtQuick.Effects
 import OmaDo.Theme 1.0
 
 Item {
@@ -11,11 +11,20 @@ Item {
     implicitWidth: size
     implicitHeight: size
 
-    IconImage {
+    Image {
+        id: iconImg
         anchors.fill: parent
         source: root.name ? "qrc:/OmaDo/icons/" + root.name + ".svg" : ""
         sourceSize.width: root.size * 2
         sourceSize.height: root.size * 2
-        color: root.color
+        fillMode: Image.PreserveAspectFit
+        visible: false
+    }
+
+    MultiEffect {
+        anchors.fill: iconImg
+        source: iconImg
+        colorization: 1.0
+        colorizationColor: root.color
     }
 }

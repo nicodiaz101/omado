@@ -98,7 +98,7 @@ void TaskListModel::createList(const QString &name, const QString &icon) {
     m_lists.append(l);
     endInsertRows();
 
-    m_repo->createList(l.displayName);
+    m_repo->createList(l);
 
     if (m_graph) {
         m_graph->createList(l.displayName, [this, localId = l.id](bool ok, const QJsonObject &obj, const QString &) {

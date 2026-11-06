@@ -361,20 +361,133 @@ QString TaskInputParser::cleanTitle(const QString &original, const QList<MatchSp
     return cleaned;
 }
 
+bool TaskInputParser::extractImportance(const QString &text, QString &importance, MatchSpan &span) {
+    // Buscar '!' o '!!' al inicio o final de palabra
+    static const QRegularExpression rx(QStringLiteral(R"((?:^|\s)(!{1,2})(?=\s|$))"));
+    QRegularExpressionMatch m = rx.match(text);
+    if (m.hasMatch()) {
+        importance = QStringLiteral("high");
+        span.start = m.capturedStart(1);
+        span.length = m.capturedLength(1);
+        return true;
+    }
+    return false;
+}
+
+bool TaskInputParser::extractTargetList(const QString &text, QString &targetList, MatchSpan &span) {
+    // Buscar #"Nombre con espacios" o #NombreSinEspacios
+    static const QRegularExpression rx(
+        QStringLiteral(R"delim((?:^|\s)#(?:"([^"]+)"|([^\s#]+))(?=\s|$))delim")
+    );
+    QRegularExpressionMatch m = rx.match(text);
+    if (m.hasMatch()) {
+        targetList = !m.captured(1).isEmpty() ? m.captured(1).trimmed() : m.captured(2).trimmed();
+        // Incluir el '#' en el span para limpiarlo del título
+        int hashPos = text.indexOf(QLatin1Char('#'), m.capturedStart());
+        span.start = hashPos;
+        span.length = m.capturedEnd() - hashPos;
+        return true;
+    }
+    return false;
+}
+
+bool TaskInputParser::extractRecurrence(const QString &text, QString &recurrence, MatchSpan &span) {
+    // Diariamente / daily / todos los días / cada día
+    {
+        static const QRegularExpression rx(
+            QStringLiteral(R"(\b(?:todos\s+los\s+d[ií]as|cada\s+d[ií]a|diariamente|diario|every\s+day|daily)\b)"),
+            QRegularExpression::CaseInsensitiveOption);
+        QRegularExpressionMatch m = rx.match(text);
+        if (m.hasMatch()) {
+            recurrence = QStringLiteral("daily");
+            span.start = m.capturedStart();
+            span.length = m.capturedLength();
+            return true;
+        }
+    }
+
+    // Semanalmente / weekly / todas las semanas / cada semana
+    {
+        static const QRegularExpression rx(
+            QStringLiteral(R"(\b(?:todas\s+las\s+semanas|cada\s+semana|semanalmente|semanal|every\s+week|weekly)\b)"),
+            QRegularExpression::CaseInsensitiveOption);
+        QRegularExpressionMatch m = rx.match(text);
+        if (m.hasMatch()) {
+            recurrence = QStringLiteral("weekly");
+            span.start = m.capturedStart();
+            span.length = m.capturedLength();
+            return true;
+        }
+    }
+
+    // Mensualmente / monthly / todos los meses / cada mes
+    {
+        static const QRegularExpression rx(
+            QStringLiteral(R"(\b(?:todos\s+los\s+meses|cada\s+mes|mensualmente|mensual|every\s+month|monthly)\b)"),
+            QRegularExpression::CaseInsensitiveOption);
+        QRegularExpressionMatch m = rx.match(text);
+        if (m.hasMatch()) {
+            recurrence = QStringLiteral("monthly");
+            span.start = m.capturedStart();
+            span.length = m.capturedLength();
+            return true;
+        }
+    }
+
+    // Anualmente / yearly / todos los años / cada año
+    {
+        static const QRegularExpression rx(
+            QStringLiteral(R"(\b(?:todos\s+los\s+a[ñn]os|cada\s+a[ñn]o|anualmente|anual|every\s+year|yearly)\b)"),
+            QRegularExpression::CaseInsensitiveOption);
+        QRegularExpressionMatch m = rx.match(text);
+        if (m.hasMatch()) {
+            recurrence = QStringLiteral("yearly");
+            span.start = m.capturedStart();
+            span.length = m.capturedLength();
+            return true;
+        }
+    }
+
+    return false;
+}
+
 TaskParseResult TaskInputParser::parse(const QString &input, const QDateTime &now) {
     TaskParseResult result;
     if (input.trimmed().isEmpty()) return result;
 
+    QList<MatchSpan> spans;
+
+    // 1. Extraer importancia (! o !!)
+    MatchSpan impSpan;
+    if (extractImportance(input, result.importance, impSpan)) {
+        result.hasImportance = true;
+        spans.append(impSpan);
+    }
+
+    // 2. Extraer lista destino (#Lista o #"Lista con espacios")
+    MatchSpan listSpan;
+    if (extractTargetList(input, result.targetListName, listSpan)) {
+        result.hasTargetList = true;
+        spans.append(listSpan);
+    }
+
+    // 3. Extraer recurrencia (diario, semanal, mensual, etc.)
+    MatchSpan recSpan;
+    if (extractRecurrence(input, result.recurrence, recSpan)) {
+        result.hasRecurrence = true;
+        spans.append(recSpan);
+    }
+
+    // 4. Extraer hora
     QTime detectedTime;
     MatchSpan timeSpan;
     bool hasTime = extractTime(input, detectedTime, timeSpan);
+    if (timeSpan.isValid()) spans.append(timeSpan);
 
+    // 5. Extraer fecha
     QDate detectedDate;
     MatchSpan dateSpan;
     bool hasDate = extractDate(input, now, detectedTime, hasTime, detectedDate, dateSpan);
-
-    QList<MatchSpan> spans;
-    if (timeSpan.isValid()) spans.append(timeSpan);
     if (dateSpan.isValid()) spans.append(dateSpan);
 
     result.cleanTitle = cleanTitle(input, spans);

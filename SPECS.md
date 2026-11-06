@@ -1,37 +1,41 @@
 # SPECS.md — Especificaciones Técnicas de OmaDo
-> Cliente nativo de tareas para Omarchy Quattro, con sincronización opcional con Microsoft To Do
-> **Stack:** C++17 · Qt 6 · QML/Qt Quick · CMake 3.21+
+> Cliente nativo de tareas para Omarchy (Quattro / 4.5+), con sincronización opcional con Microsoft To Do / Samsung Reminders
+> **Stack:** C++17 · Qt 6 · QML/Qt Quick · CMake 3.21+ · **Versión:** 2.0.0
 
 ---
 
 ## 1. Visión General
 
-OmaDo sigue la filosofía minimalista de [OmaWrite](https://github.com/omacom-io/omawrite) y
-[OmaCalc](https://github.com/omacom-io/omacalc): nativo, sin dependencias pesadas, integrado
-al 100% con el sistema de theming de Omarchy Quattro.
+OmaDo sigue la filosofía minimalista de [OmaWrite](https://github.com/omacom-io/omawrite),
+[OmaCalc](https://github.com/omacom-io/omacalc) y las aplicaciones nativas de Omarchy 4.5:
+nativo, sin dependencias pesadas, integrado al 100% con el sistema de theming, notificaciones,
+idiomas y modo de workspaces flotantes/tiling de Omarchy.
 
-### Principio Arquitectural Fundamental: Local-First
+### Principio Arquitectural Fundamental: Local-First + Integración Nativa Omarchy 4.5
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                       OmaDo v1.0                               │
-│            Gestor de tareas 100% offline                       │
-│        Almacenamiento: SQLite via Qt6::Sql                     │
-│        (incluido en qt6-base, sin dependencias extra)          │
-└──────────────────────────────┬─────────────────────────────────┘
-                               │ v1.1+ — opcional, desactivado por defecto
-               ┌───────────────▼──────────────────┐
-               │       MS To Do Sync              │
-               │  OAuth2 PKCE + Graph API         │
-               │  Solo se activa si el usuario    │
-               │  conecta su cuenta Microsoft     │
-               └──────────────────────────────────┘
+│                       OmaDo v2.0                               │
+│            Gestor de tareas 100% offline-first                 │
+│        Almacenamiento: SQLite (WAL) via Qt6::Sql               │
+│        GUI + Quick-Add + CLI + Daemon D-Bus (io.omarchy.OmaDo) │
+└──────────────┬────────────────────────────────┬────────────────┘
+               │ Nativo Omarchy 4.5             │ Opcional (OAuth2 PKCE)
+┌──────────────▼─────────────────┐ ┌────────────▼─────────────────────┐
+│ Integración Omarchy 4.5        │ │ MS To Do / Samsung Reminders     │
+│ • Omapager (Acciones, Links,   │ │ • Microsoft Graph API v1.0       │
+│   Urgencia, Transient, Icono)  │ │ • Sync bidireccional (listas,    │
+│ • Idiomas en vivo (~/.config/  │ │   tareas, checklistItems)        │
+│   omarchy/language)            │ └──────────────────────────────────┘
+│ • Dock y Workspaces Flotantes  │
+│ • Plugin Quickshell omado.panel│
+└────────────────────────────────┘
 ```
 
 **La sincronización con MS To Do es un módulo opcional**, no el núcleo. El núcleo es un
-gestor de tareas local completo con paridad de features de MS To Do.
+gestor de tareas local completo con paridad de features de MS To Do / Samsung Reminders.
 
-El binario final debe arrancar en menos de 200 ms en hardware moderno.
+El binario final debe arrancar en menos de 200 ms en hardware moderno (y `< 100 ms` en modo `--quick-add` o CLI).
 
 ---
 
@@ -167,59 +171,77 @@ omado/
 ├── SPECS.md
 ├── ROADMAP.md
 ├── AGENT.md
-├── wireframe.jpeg                  # Diseño de referencia original
-├── LICENSE                         # MIT
+├── PKGBUILD
+├── install.sh / uninstall.sh
+├── omado.desktop
+├── io.omarchy.OmaDo.xml
+├── LICENSE
 ├── README.md
-├── .gitignore
 │
 ├── src/
-│   ├── main.cpp                    # Punto de entrada: modo GUI o --daemon
+│   ├── main.cpp                        # Punto de entrada: GUI, --daemon, --quick-add o CLI
 │   │
 │   ├── core/
-│   │   ├── ThemeReader.h/.cpp      # Parser TOML colors.toml → Q_PROPERTY para QML
-│   │   ├── Database.h/.cpp         # Inicialización y migraciones del schema SQLite
-│   │   ├── AuthManager.h/.cpp      # OAuth2 PKCE via QNetworkAccessManager
-│   │   ├── KeychainStore.h/.cpp    # Wrapper qtkeychain: read/write/delete tokens
-│   │   ├── NotificationService.h/.cpp  # Notificaciones via QDBus → freedesktop
-│   │   └── DaemonService.h/.cpp    # Adaptador QtDBus: servicio io.omarchy.OmaDo
+│   │   ├── ThemeReader.h/.cpp          # Parser TOML colors.toml → Q_PROPERTY para QML
+│   │   ├── Translator.h/.cpp           # QTranslator JSON en vivo (~/.config/omarchy/language)
+│   │   ├── Database.h/.cpp             # Inicialización y migraciones del schema SQLite (v1–v4+)
+│   │   ├── AuthManager.h/.cpp          # OAuth2 PKCE via QNetworkAccessManager
+│   │   ├── KeychainStore.h/.cpp        # Wrapper qtkeychain: read/write/delete tokens
+│   │   ├── NotificationService.h/.cpp  # Notificaciones D-Bus (Omapager 4.5: actions, hints, signals)
+│   │   ├── ReminderService.h/.cpp      # Monitor de recordatorios + handler de acciones D-Bus
+│   │   ├── SyncEngine.h/.cpp           # Coordinador de sincronización bidireccional
+│   │   ├── TaskInputParser.h/.cpp      # Parser NLP C++ (fechas, horas, !, #Lista, recurrencia)
+│   │   ├── CliRunner.h/.cpp            # Subcomandos CLI (add, list, done, sync) via D-Bus / DB
+│   │   └── DaemonService.h/.cpp        # Adaptador QtDBus: servicio io.omarchy.OmaDo
 │   │
 │   ├── models/
-│   │   ├── TaskList.h/.cpp         # Struct + QAbstractListModel para listas
-│   │   ├── Task.h/.cpp             # Struct + QAbstractListModel para tareas
-│   │   ├── TaskStep.h/.cpp         # Struct para subtareas/checklist
-│   │   ├── LocalRepository.h/.cpp  # CRUD contra SQLite (fuente de verdad local)
-│   │   └── GraphClient.h/.cpp      # Red: QNAM + Graph API (solo si sync activo)
+│   │   ├── TaskList.h                  # Struct TaskList y OmaDoListEntry (D-Bus)
+│   │   ├── Task.h                      # Struct Task
+│   │   ├── TaskStep.h                  # Struct TaskStep (subtareas/checklistItems)
+│   │   ├── TaskListModel.h/.cpp        # QAbstractListModel para listas + emojis/renombrado
+│   │   ├── TaskModel.h/.cpp            # QAbstractListModel para tareas, filtros, orden y sugerencias
+│   │   ├── LocalRepository.h/.cpp      # CRUD asíncrono contra SQLite (fuente de verdad local)
+│   │   └── GraphClient.h/.cpp          # Red: QNAM + Microsoft Graph API v1.0
 │   │
 │   └── qml/
-│       ├── main.qml                # ApplicationWindow frameless, raíz
-│       ├── SidePanel.qml           # Panel izquierdo completo (zonas A)
-│       ├── SpecialListSection.qml  # Sección superior: My Day, Schedule, Tasks
-│       ├── UserListSection.qml     # Sección inferior: listas custom + New List
-│       ├── TaskView.qml            # Zona B: lista de tareas
-│       ├── ScheduleView.qml        # Vista especial Schedule (agrupada por fecha)
-│       ├── TaskDetail.qml          # Panel lateral (overlay): notas, steps, fecha, prioridad
-│       ├── InputBar.qml            # Zona C: barra inferior de entrada de tarea
-│       ├── TaskDelegate.qml        # Ítem de tarea con checkbox
-│       ├── ScheduleDelegate.qml    # Ítem de tarea en vista Schedule (con fecha)
-│       ├── AuthView.qml            # Pantalla de autenticación OAuth2 (overlay)
+│       ├── Main.qml                    # ApplicationWindow frameless principal
+│       ├── QuickAddWindow.qml          # Mini-ventana flotante (--quick-add) centrada con NLP en vivo
+│       ├── SidePanel.qml               # Panel izquierdo completo (Zona A)
+│       ├── TaskView.qml                # Zona B: lista de tareas + sugerencias de Mi Día
+│       ├── TaskDetail.qml              # Panel lateral: notas (con links clicables), steps, metadatos
+│       ├── InputBar.qml                # Zona C: barra inferior con badges NLP en tiempo real
+│       ├── TaskDelegate.qml            # Ítem de tarea con CheckCircle, badges e importancia
 │       └── components/
-│           ├── ThemedText.qml      # Text con iA Writer Mono + color del tema
-│           ├── FocusRect.qml       # Indicador visual de foco para teclado
-│           ├── StatusDot.qml       # Estado de sync (solo visible si sync activo)
-│           ├── SectionSeparator.qml # Separador horizontal del SidePanel
-│           ├── CheckCircle.qml     # Círculo de checkbox (outline/filled)
-│           └── ImportanceDot.qml   # Indicador de prioridad (low/normal/high)
+│           ├── AppIcon.qml             # Renderizador de iconos SVG monocromáticos teñidos con Theme
+│           ├── CheckCircle.qml         # Círculo de checkbox (outline/filled)
+│           ├── SectionSeparator.qml    # Separador horizontal del SidePanel
+│           ├── DatePickerPopup.qml     # Selector de fecha de vencimiento
+│           ├── TimePickerPopup.qml     # Selector de hora de recordatorio
+│           ├── DraftStepsPopup.qml     # Popup para subtareas en borrador desde InputBar
+│           ├── RecurrencePopup.qml     # Selector de recurrencia
+│           ├── ListContextMenu.qml     # Menú contextual nativo para listas personalizadas
+│           ├── ListIconPickerPopup.qml # Selector de emojis/iconos por categorías
+│           ├── ListRenameDialog.qml    # Diálogo inline/overlay de renombrado de lista
+│           ├── MyDaySuggestionsPopup.qml # Panel/banner de sugerencias de tareas vencidas para Mi Día
+│           └── ShortcutHelpOverlay.qml # Overlay de ayuda de atajos de teclado (?)
+│
+├── i18n/
+│   ├── en.json                         # Catálogo base inglés (plurales CLDR)
+│   ├── es.json                         # Catálogo español completo
+│   └── ...                             # Catálogos compatibles con omarchy language
 │
 ├── fonts/
 │   ├── iAWriterMono-Regular.ttf
-│   ├── iAWriterMono-Bold.ttf
-│   └── OFL.txt
+│   └── iAWriterMono-Bold.ttf
 │
-├── bin/
-│   └── omado
+├── icons/
+│   └── *.svg                           # Iconografía vectorial monocromática
 │
-├── pkgbuild/
-│   └── PKGBUILD
+├── autostart/
+│   └── omado-daemon.desktop
+│
+├── systemd/
+│   └── omado.service
 │
 └── tests/
     ├── CMakeLists.txt
@@ -227,7 +249,16 @@ omado/
     ├── tst_ThemeReader.cpp
     ├── tst_Database.cpp
     ├── tst_LocalRepository.cpp
-    └── tst_AuthManager.cpp
+    ├── tst_NotificationService.cpp
+    ├── tst_ReminderService.cpp
+    ├── tst_DaemonService.cpp
+    ├── tst_AuthManager.cpp
+    ├── tst_GraphClient.cpp
+    ├── tst_TaskModel.cpp
+    ├── tst_TaskListModel.cpp
+    ├── tst_TaskInputParser.cpp
+    ├── tst_Translator.cpp
+    └── tst_CliRunner.cpp
 ```
 
 ---
@@ -237,12 +268,12 @@ omado/
 ### 5.1 Stack de Datos
 
 - **Motor:** SQLite via `Qt6::Sql` (`QSqlDatabase`, `QSqlQuery`) — incluido en `qt6-base`.
-- **Ubicación del archivo:** `~/.local/share/omado/omado.db` (XDG Data Home).
-- **Migraciones:** Sistema de versiones en tabla `schema_version`. `Database::initialize()`
-  aplica migraciones en orden al arrancar.
-- **SQLite WAL mode** activado por defecto.
+- **Ubicación del archivo:** `QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/omado.db"`.
+- **Concurrencia:** `QThreadPool` dedicado (1 worker persistente con `QThreadStorage`) en `LocalRepository`.
+- **Migraciones:** Sistema de versiones en tabla `schema_version` (actualmente v4). `Database::initialize()` aplica migraciones transaccionales en orden al arrancar.
+- **SQLite WAL mode** (`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA cache_size=-512;`).
 
-### 5.2 Schema SQL (v1)
+### 5.2 Schema SQL (v1–v4)
 
 ```sql
 CREATE TABLE IF NOT EXISTS task_lists (
@@ -263,12 +294,13 @@ CREATE TABLE IF NOT EXISTS tasks (
     is_completed    INTEGER NOT NULL DEFAULT 0,
     is_my_day       INTEGER NOT NULL DEFAULT 0,
     importance      TEXT NOT NULL DEFAULT 'normal',
-    due_date        TEXT,           -- ISO 8601 date
+    due_date        TEXT,           -- ISO 8601 date (YYYY-MM-DD)
     reminder_at     TEXT,           -- ISO 8601 datetime
     reminded        INTEGER NOT NULL DEFAULT 0,
     recurrence      TEXT NOT NULL DEFAULT 'none',
     sort_order      INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL,
+    updated_at      TEXT,
     completed_at    TEXT,
     synced_at       TEXT,
     remote_id       TEXT
@@ -281,6 +313,13 @@ CREATE TABLE IF NOT EXISTS task_steps (
     is_completed    INTEGER NOT NULL DEFAULT 0,
     sort_order      INTEGER NOT NULL DEFAULT 0,
     remote_id       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS deleted_tasks (
+    id              TEXT PRIMARY KEY,
+    remote_id       TEXT NOT NULL,
+    list_remote_id  TEXT,
+    deleted_at      TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -299,33 +338,34 @@ VALUES
   ('default-tasks',    'Tasks',    0, 3, datetime('now'));
 ```
 
-Las vistas especiales (`is_special=1`) no son listas reales de almacenamiento —
-son **vistas virtuales** que hacen queries dinámicos. `LocalRepository` las trata diferente.
-
 ### 5.3 LocalRepository
 
 `LocalRepository : QObject` es la única clase autorizada a ejecutar SQL.
 
 ```
-Métodos (QFuture<T> via QtConcurrent::run):
-  fetchLists()              → QFuture<QList<TaskList>>
-  fetchTasks(listId)        → QFuture<QList<Task>>      (lista real)
-  fetchMyDayTasks()         → QFuture<QList<Task>>      (is_my_day=1 o due_date=hoy)
-  fetchScheduleTasks()      → QFuture<QList<Task>>      (due_date IS NOT NULL, ordenado)
-  fetchAllTasks()           → QFuture<QList<Task>>      (todas, para vista Tasks)
-  createList(name)          → QFuture<TaskList>
-  updateList(list)          → QFuture<bool>
-  deleteList(id)            → QFuture<bool>
-  createTask(task)          → QFuture<Task>
-  updateTask(task)          → QFuture<bool>
-  deleteTask(id)            → QFuture<bool>
-  fetchSteps(taskId)        → QFuture<QList<TaskStep>>
-  createStep(step)          → QFuture<TaskStep>
-  updateStep(step)          → QFuture<bool>
-  deleteStep(id)            → QFuture<bool>
-  getPendingCount(listId)   → QFuture<int>
-  getTotalPendingCount()    → QFuture<int>
-  getPendingReminders()     → QFuture<QList<Task>>     (reminder_at <= now AND reminded=0)
+Métodos principales (QFuture<T> via QtConcurrent::run):
+  fetchLists()                          → QFuture<QList<TaskList>>
+  fetchTasks(listId)                    → QFuture<QList<Task>>      (lista real)
+  fetchMyDayTasks()                     → QFuture<QList<Task>>      (is_my_day=1 o due_date=hoy o reminder hoy)
+  fetchOverdueTasks()                   → QFuture<QList<Task>>      (is_completed=0 y due_date < hoy o reminder_at < hoy no reprogramadas)
+  fetchScheduleTasks()                  → QFuture<QList<Task>>      (due_date IS NOT NULL, ordenado)
+  fetchAllTasks()                       → QFuture<QList<Task>>      (todas, para vista Tasks)
+  createList(name)                      → QFuture<TaskList>
+  updateList(list)                      → QFuture<bool>
+  deleteList(id)                        → QFuture<bool>
+  createTask(task)                      → QFuture<Task>
+  updateTask(task)                      → QFuture<bool>
+  deleteTask(id, recordForRemoteSync)   → QFuture<bool>
+  toggleTask(taskId, completed)         → QFuture<bool>
+  rescheduleTaskForMyDay(taskId, now)   → QFuture<bool>             (is_my_day=1, due_date=hoy, ajusta reminder_at conservando hora o +1h y reminded=0)
+  snoozeTaskReminder(taskId, minutes)   → QFuture<bool>             (reminder_at=now+minutes, reminded=0)
+  markReminded(taskId, reminded)        → QFuture<bool>
+  addStep(taskId, title)                → QFuture<TaskStep>
+  updateStep(step)                      → QFuture<bool>
+  deleteStep(stepId)                    → QFuture<bool>
+  getPendingCount(listId)               → QFuture<int>
+  getTotalPendingCount()                → QFuture<int>
+  getPendingReminders()                 → QFuture<QList<Task>>      (reminder_at <= now AND is_completed=0 AND reminded=0)
 ```
 
 ---
@@ -400,27 +440,62 @@ Scopes: `Tasks.ReadWrite offline_access`
 
 ---
 
-## 9. Notificaciones del Sistema
+## 9. Notificaciones del Sistema (Motor Omapager — Omarchy 4.5)
 
-Via `org.freedesktop.Notifications` directamente con `Qt6::DBus`. Sin `QProcess`.
+OmaDo se comunica directamente con `org.freedesktop.Notifications` mediante `Qt6::DBus` (implementado por `omarchy.notifications` / Omapager dentro de `omarchy-shell` en Omarchy 4.5). Sin `QProcess`.
+
+### 9.1 Firma y Capacidades de `NotificationService`
 
 ```cpp
-QDBusInterface iface(
-    "org.freedesktop.Notifications",
-    "/org/freedesktop/Notifications",
-    "org.freedesktop.Notifications",
-    QDBusConnection::sessionBus()
-);
-iface.call("Notify",
-    "OmaDo", 0u, "checkbox-checked",
-    title, body,
-    QStringList(), QVariantMap(), 5000
-);
+struct NotificationOptions {
+    QString     iconName   = QStringLiteral("omado");
+    int         timeoutMs  = 5000;
+    uint        replacesId = 0u;
+    uchar       urgency    = 1;     // 0=Low, 1=Normal, 2=Critical
+    bool        transient  = false; // true = no persiste en history.json de Omarchy 4.5
+    QStringList actions;            // pares ["action_key", "Label", ...]
+};
 ```
 
-**Trigger de notificaciones:**
-- Reminder de tarea: daemon monitorea `reminder_at` con QTimer de 60s.
-- Tarea marcada como completada desde el plugin de panel.
+```cpp
+QVariantMap hints;
+hints.insert(QStringLiteral("desktop-entry"), QStringLiteral("omado"));
+hints.insert(QStringLiteral("urgency"), QVariant::fromValue<uchar>(opts.urgency));
+hints.insert(QStringLiteral("transient"), opts.transient);
+
+QDBusMessage reply = iface.call(
+    QStringLiteral("Notify"),
+    QStringLiteral("OmaDo"),
+    opts.replacesId,
+    opts.iconName,
+    title,
+    body,
+    opts.actions,
+    hints,
+    opts.timeoutMs
+);
+uint notificationId = (!reply.arguments().isEmpty()) ? reply.arguments().first().toUInt() : 0u;
+```
+
+### 9.2 Integración Profunda con Omapager (Omarchy 4.5)
+
+1. **Identidad, Agrupación y Snooze por App:**
+   - Se envía siempre `app_name = "OmaDo"`, `app_icon = "omado"` y `hints["desktop-entry"] = "omado"`. Esto garantiza que `Icons.js` y `Markup.js` de Omarchy 4.5 agrupen las tarjetas bajo la clave `app:omado`, muestren el icono vectorial de OmaDo y habiliten el pospuesto (*Snooze*) por aplicación desde el centro de notificaciones.
+2. **Botones de Acción Interactivos (`ActionInvoked`):**
+   - Cada recordatorio de tarea incluye acciones D-Bus en la tarjeta:
+     - `"complete"` → `"Complete"` / `"Completar"`: marca la tarea como completada en `LocalRepository`, encola sync si corresponde y emite `TasksChanged` / `TodayTasksChanged`.
+     - `"snooze-15"` → `"Snooze 15 min"` / `"Posponer 15 min"`: reprograma `reminder_at = now + 15 min` con `reminded = 0`.
+   - `NotificationService` se suscribe a las señales `ActionInvoked(uint id, QString action_key)` y `NotificationClosed(uint id, uint reason)` de `org.freedesktop.Notifications` en el bus de sesión.
+   - `ReminderService` mantiene un mapa en memoria `QHash<uint, QString> m_activeNotifications` (`notificationId -> taskId`) para despachar la acción sobre la tarea exacta incluso sin abrir la ventana de OmaDo.
+3. **Links Clicables, Reuniones y Resumen de Subtareas:**
+   - El motor `Detect.js` y `Markup.js` de Omarchy 4.5 detecta automáticamente URLs (`https://...`) y enlaces de videollamadas (Google Meet, Zoom, Microsoft Teams, Jitsi) en el `body` de la notificación, añadiendo el botón nativo *"Open Link"* / *"Join"* en la tarjeta.
+   - `ReminderService` construye el cuerpo de la notificación combinando:
+     - El conteo de subtareas si la tarea tiene `steps` (ej. `"📋 1/3 pasos completados"`).
+     - El contenido de `task.body` (preservando las URLs para que Omapager las haga clicables).
+4. **Niveles de Urgencia e Historial Persistente:**
+   - Tareas con `importance == "high"` se envían con `urgency = 2` (`Critical`), destacando con `Commons.Color.urgent` en Omarchy 4.5 y permaneciendo visibles hasta interacción del usuario.
+   - Recordatorios normales usan `urgency = 1` (`Normal`) y `transient = false` (quedan registrados en el historial de 24h de Omarchy 4.5 si el usuario está en modo *Do Not Disturb* o *Snooze*).
+   - Notificaciones meramente informativas usan `transient = true` para no ensuciar el historial.
 
 ---
 
@@ -430,12 +505,13 @@ iface.call("Notify",
 
 ```cpp
 struct TaskList {
-    QString  id;
-    QString  displayName;
-    bool     isSpecial   = false;  // My Day, Schedule, Tasks (vistas virtuales)
-    int      sortOrder   = 0;
-    QString  remoteId;
-    bool     isSynced() const { return !remoteId.isEmpty(); }
+    QString   id;
+    QString   displayName;
+    bool      isSpecial   = false;  // My Day, Schedule, Tasks (vistas virtuales)
+    int       sortOrder   = 0;
+    QString   remoteId;
+    QDateTime syncedAt;
+    bool      isSynced() const { return !remoteId.isEmpty(); }
 };
 
 struct TaskStep {
@@ -453,196 +529,221 @@ struct Task {
     QString         body;
     bool            isCompleted  = false;
     bool            isMyDay      = false;
-    QString         importance;      // "low" | "normal" | "high"
+    QString         importance   = "normal"; // "low" | "normal" | "high"
     QDate           dueDate;
     QDateTime       reminderAt;
-    QString         recurrence;      // "none"|"daily"|"weekly"|"monthly"|"yearly"
+    bool            reminded     = false;
+    QString         recurrence   = "none";   // "none"|"daily"|"weekly"|"monthly"|"yearly"
     QList<TaskStep> steps;
     int             sortOrder    = 0;
     QDateTime       createdAt;
+    QDateTime       updatedAt;
     QDateTime       completedAt;
+    QDateTime       syncedAt;
     QString         remoteId;
 };
 ```
 
 ### 10.2 Modelos QML
 
-- `TaskListModel : QAbstractListModel` — roles: Id, DisplayName, IsSpecial, SortOrder, PendingCount.
-- `TaskModel : QAbstractListModel` — roles: Id, Title, IsCompleted, IsMyDay, DueDate, Importance, ReminderAt, HasSteps.
-- `ScheduleTaskModel` — extiende `TaskModel` con rol `DueDateSection` (string de fecha para secciones).
-- `QSortFilterProxyModel` para filtrado de completadas (toggle via icono ≡).
+- `TaskListModel : QAbstractListModel` — roles: `IdRole`, `DisplayNameRole`, `NameRole` (sin emoji), `IconRole` (emoji), `IsSpecialRole`, `SortOrderRole`, `PendingCountRole`.
+- `TaskModel : QAbstractListModel` — roles: `IdRole`, `ListIdRole`, `TitleRole`, `BodyRole`, `IsCompletedRole`, `IsMyDayRole`, `DueDateRole`, `ImportanceRole`, `ReminderAtRole`, `RecurrenceRole`, `StepsRole`, `HasStepsRole`, `StepsCountRole`, `CompletedStepsCountRole`.
+  - Propiedades adicionales: `hideCompleted`, `sortByDueDate`, `overdueSuggestions` (`QVariantList` de tareas vencidas sugeridas para *My Day*), `overdueCount`.
 
 ---
 
-## 11. UI — QML / Qt Quick
+## 11. UI — QML / Qt Quick e Integraciones de Escritorio 4.5
 
-### 11.1 Ventana Frameless
+### 11.1 Ventana, Barra de Título en Modo Flotante (`hyprbars`) e Identidad en `omarchy.dock`
 
-```qml
-ApplicationWindow {
-    flags: Qt.FramelessWindowHint | Qt.Window
-    color: "transparent"
-    DragHandler {
-        target: null
-        onActiveChanged: if (active) window.startSystemMove()
-    }
-}
+En Omarchy 4.5, cuando el usuario activa el modo de **Workspaces Flotantes con Dock** (`Super + L` o como layout por defecto para quienes prefieren usar el escritorio en modo ventana con mouse), el compositor carga automáticamente `/usr/lib/omarchy-hyprland-titlebars/titlebars.so` (`hyprbars`) sobre todas las ventanas con tag `omarchy-floating-workspace`.
+
+`hyprbars` inyecta del lado del compositor (server-side) una **barra de título nativa de 30px** con los colores del tema activo (`lighter_background` / `foreground`) que ya incluye a la derecha los **3 botones de control de ventana**:
+- **`−` (Minimizar al Dock):** Ejecuta `omarchy-hyprland-window-minimize`, enviando la ventana a `special:minimized` para que `omarchy.dock` la retenga y la restaure al hacer clic en su icono.
+- **`□` (Maximizar / Restaurar):** Alterna el estado maximizado en el workspace flotante (también al hacer doble clic en la barra de título).
+- **`×` (Cerrar):** Cierra la ventana limpiamente.
+
+Para que OmaDo se integre sin fisuras tanto en modo *Tiling* como en modo *Floating + Dock*:
+
+```cpp
+// En main.cpp — obligatorio para que omarchy.dock y hyprbars asocien la ventana a omado.desktop
+app.setDesktopFileName(QStringLiteral("omado"));
+app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/OmaDo/icons/omado.svg")));
 ```
 
-El draggable cubre todo el SidePanel. El TaskView puede tener su propio DragHandler
-solo en áreas sin elementos interactivos.
+- **Geometría y bordes en `Main.qml`:**
+  - Usar `ApplicationWindow` estándar de Wayland (permitiendo que Hyprland gestione las decoraciones *server-side* vía `xdg-decoration`) y dimensiones mínimas (`minimumWidth: 640`, `minimumHeight: 460`) para que el redimensionado con el mouse en modo ventana no rompa el layout de 3 paneles.
+  - Eliminar el `radius: 8` fijo del contenedor raíz en `Main.qml` (usando `radius: 0` para que coincida con el `decoration:rounding = 0` de Hyprland y encaje al píxel debajo de la barra de título plana de 30px de `hyprbars` sin dejar huecos transparentes en las esquinas superiores ni doble borde).
+  - Conservar el `DragHandler` (`window.startSystemMove()`) en las zonas libres del `SidePanel` y encabezado de `TaskView` para permitir arrastrar la ventana desde adentro incluso si alguien la flota individualmente con `Super + T` en un workspace tiling.
 
 ### 11.2 Sistema de Theming — ThemeReader
 
 **Archivo:** `~/.local/state/omarchy/current/theme/colors.toml`
 
-```toml
-[colors]
-background = "#1a1a2e"
-foreground = "#e0e0e0"
-accent     = "#7aa2f7"
-surface    = "#16213e"
-border     = "#2a2a4a"
-error      = "#f7768e"
-```
-
-- Parser TOML manual con `QRegularExpression`.
-- `QFileSystemWatcher` para recarga en caliente.
+- Parser TOML manual con `QRegularExpression` (soporta `background`, `foreground`, `accent`, `surface`/`lighter_background`, `border`/`muted`, `error`/`red`).
+- `QFileSystemWatcher` sobre el archivo y el directorio padre para recarga en caliente ante atomic renames de `omarchy theme set`.
 - Singleton en QML: `import OmaDo.Theme 1.0` → `Theme.background`, `Theme.accent`, etc.
 
 ### 11.3 Tipografía
 
 - **iA Writer Mono** (bundled, OFL 1.1). Tamaño base: 13px.
-- Registro: `QFontDatabase::addApplicationFont(":/fonts/iAWriterMono-Regular.ttf")`.
+- Registro: `QFontDatabase::addApplicationFont(":/qt/qml/OmaDo/fonts/iAWriterMono-Regular.ttf")`.
 
 ### 11.4 CheckCircle — El Checkbox de OmaDo
 
-El checkbox de tareas es un círculo vacío (`○`), no un cuadrado. Al completar la tarea,
-el círculo se llena o se tacha:
+El checkbox de tareas es un círculo vacío (`○`), nunca un cuadrado (`CheckCircle.qml`).
 
-```qml
-// CheckCircle.qml
-Rectangle {
-    width: 18; height: 18
-    radius: 9   // círculo perfecto
-    color: isCompleted ? Theme.accent : "transparent"
-    border.color: isCompleted ? Theme.accent : Theme.border
-    border.width: 1.5
-
-    // Tick o tilde al completar
-    Text {
-        visible: isCompleted
-        text: "✓"
-        color: Theme.background
-        font.pixelSize: 11
-        anchors.centerIn: parent
-    }
-}
-```
-
-Este componente es el `CheckCircle.qml` y se usa tanto en `TaskDelegate` como en `InputBar`.
-
-### 11.5 Navegación por Teclado
+### 11.5 Navegación por Teclado (Keyboard-First)
 
 | Tecla | Acción |
 |---|---|
 | `Tab` / `Shift+Tab` | Alternar foco entre SidePanel y TaskView |
-| `↑` / `↓` | Mover foco entre ítems de la lista activa |
-| `Space` | Toggle completada en la tarea con foco |
-| `Enter` | Confirmar tarea nueva / abrir detalle de tarea con foco |
-| `N` | Activar InputBar (foco al campo de texto) |
-| `→` / `F2` | Abrir TaskDetail del ítem con foco |
-| `Delete` | Eliminar ítem con foco (confirmación inline en la barra) |
-| `Escape` | Cancelar edición / cerrar overlay de detalle |
-| `Ctrl+R` | Forzar sync (solo si sync activo) |
+| `↑` / `↓` o `k` / `j` | Mover foco entre ítems de la lista activa (cuando no hay un input de texto enfocado) |
+| `Space` | Toggle completada en la tarea seleccionada |
+| `Enter` / `F2` | Confirmar tarea nueva / abrir o enfocar `TaskDetail` de la tarea seleccionada |
+| `N` | Activar `InputBar` (foco directo al campo de texto) |
+| `Delete` | Eliminar tarea seleccionada |
+| `Escape` | Cancelar edición / cerrar `TaskDetail` o popups / cerrar modo `--quick-add` |
+| `Ctrl+R` | Forzar sincronización con MS To Do |
+| `Ctrl+1` / `Ctrl+2` / `Ctrl+3` | Ir a *My Day* / *Schedule* / *Tasks* |
+| `?` | Mostrar/ocultar overlay de atajos de teclado (`ShortcutHelpOverlay.qml`) |
 | `Ctrl+Q` | Cerrar aplicación |
-| `Ctrl+1` | Ir a My Day |
-| `Ctrl+2` | Ir a Schedule |
-| `Ctrl+3` | Ir a Tasks (global) |
-| `Ctrl+4..9` | Ir a lista custom por índice |
 
-### 11.6 Estados del Footer "Log in on MS To Do"
+### 11.6 Internacionalización en Vivo — `Translator` (Omarchy 4.5)
 
-```
-Estado: No autenticado
-  → Mostrar: texto "Log in on MS To Do" en color Theme.accent (clickeable)
-  → Al clic: abrir AuthView (overlay)
+Omarchy 4.5 soporta 50 idiomas configurables con `omarchy language`, guardando el código activo en `~/.config/omarchy/language`.
 
-Estado: Autenticando
-  → Mostrar: texto "Connecting..." + indicador de carga
+- `Translator : public QTranslator` lee `~/.config/omarchy/language` (con fallback a `QLocale::system().name()` y a `"en"`) y vigila cambios en tiempo real con `QFileSystemWatcher`.
+- Los catálogos se empaquetan como recursos JSON planos en `:/qt/qml/OmaDo/i18n/<code>.json` (ej. `en.json`, `es.json`), mapeando el string fuente en inglés a su traducción o a un objeto de formas plurales CLDR (`{"one": "%n task", "other": "%n tasks"}`).
+- Al cambiar el idioma en Omarchy, `Translator` recarga el catálogo, actualiza `QLocale::setDefault(...)`, emite `changed()` e invoca `QQmlEngine::retranslate()` sin reiniciar OmaDo.
 
-Estado: Autenticado
-  → Mostrar: email del usuario conectado + "●" verde
-  → Opcional: al clic → popup con opción "Disconnect"
-```
+### 11.7 Sugerencias de "Mi Día" y Reprogramación de Vencidas
+
+- En la vista **My Day**, cuando existen tareas incompletas con `due_date < hoy` o `reminder_at < hoy`, `TaskView.qml` muestra un indicador/banner compacto de **"Tareas vencidas sugeridas (N)"**.
+- Al desplegar el panel de sugerencias (`MyDaySuggestionsPopup.qml`), el usuario puede agregar tareas vencidas a **Mi Día** individualmente o todas juntas con un clic:
+  - Se marca `is_my_day = 1`.
+  - Se actualiza `due_date = QDate::currentDate()`.
+  - Si la tarea tenía un `reminder_at` en el pasado, se conserva su **hora original (`reminder_at.time()`)** moviendo la fecha a **hoy**; si esa hora ya pasó en el día actual (`originalTime <= now.time()`), se reprograma a **`now + 1 hora`** y se resetea `reminded = 0` para que vuelva a sonar hoy en Omarchy 4.5.
+
+### 11.8 Parser de Lenguaje Natural (`TaskInputParser` v2.0)
+
+`TaskInputParser::parse(input, now)` extrae en C++ (bilingüe español/inglés) y limpia del título:
+1. **Fechas relativas, días de la semana y fechas numéricas/textuales:** `hoy`/`today`, `mañana`/`tomorrow`, `pasado mañana`/`day after tomorrow`, `próximo lunes`/`next monday`, `25/10`, `15 de octubre`/`Oct 15`.
+2. **Horas:** `a las 18:00`, `at 6pm`, `15hs`, `mediodía`/`noon`, `medianoche`/`midnight`.
+3. **Importancia alta (`!` / `!!`):** Token `!` o `!!` (aislado o al final) → `importance = "high"`.
+4. **Lista destino (`#NombreLista`):** Token `#Facultad` o `#"Compras Casa"` → `targetListName = "Facultad"`.
+5. **Recurrencia:** `diario`/`daily`/`cada día`/`every day`, `semanal`/`weekly`/`cada semana`/`every week`, `mensual`/`monthly`/`cada mes`, `anual`/`yearly`/`cada año` → `recurrence = "daily" | "weekly" | "monthly" | "yearly"`.
+
+### 11.9 Modo Flotante `omado --quick-add`
+
+- Invocado mediante `omado --quick-add` (ideal para bindear en Hyprland o lanzar desde `omado.panel`).
+- Abre `QuickAddWindow.qml`: ventana centrada frameless (`540x96`), siempre al frente, con bordes e iconografía del tema activo.
+- Muestra el `TextInput` con chips/badges en vivo para fecha, hora, importancia (`!`), lista (`#`) y recurrencia.
+- Al presionar `Enter`: envía la tarea al demonio vía D-Bus `CreateTaskFromNaturalText(text, true)` (o la guarda localmente vía `LocalRepository` si el demonio no está activo) y cierra el proceso en el acto. `Escape` cancela y cierra.
+
+### 11.10 Notas con Links Clicables en `TaskDetail.qml`
+
+- Cuando el campo `body` o `title` de la tarea seleccionada contiene URLs (`https?://...`), `TaskDetail.qml` muestra chips de acción rápida debajo del área de notas que abren el enlace con `QDesktopServices::openUrl(QUrl(url))` en un clic.
 
 ---
 
-## 12. Arquitectura de Modo Demonio + Plugin de Panel (v1.1)
+## 12. Arquitectura de Modo Demonio, CLI y Plugin de Panel (v2.0)
 
-### 12.1 Modo Demonio
-
-```
-omado --daemon
-```
+### 12.1 Modo Demonio (`omado --daemon`)
 
 - `QCoreApplication` — sin motor QML, sin ventana.
-- Comparte `LocalRepository`, `NotificationService`, opcionalmente `GraphClient`.
-- Sync automático cada 5 minutos (si sync activo).
-- Monitor de reminders (QTimer, 60s).
-- Servicio D-Bus: `io.omarchy.OmaDo`.
+- Instancia `LocalRepository`, `NotificationService`, `ReminderService`, `KeychainStore`, `AuthManager`, `GraphClient`, `SyncEngine` y `DaemonService`.
+- Escucha señales de `org.freedesktop.Notifications` (`ActionInvoked`, `NotificationClosed`) para completar o posponer tareas directamente desde los toasts de Omarchy 4.5.
+- En modo GUI, la ventana principal también se suscribe a las señales `TasksChanged` y `TodayTasksChanged` del demonio para refrescar `TaskModel` y `TaskListModel` en tiempo real cuando una tarea cambia desde una notificación, desde `omado.panel` o desde la CLI.
 
-### 12.2 Interfaz D-Bus
+### 12.2 Interfaz D-Bus (`io.omarchy.OmaDo`)
 
 ```xml
 <interface name="io.omarchy.OmaDo">
   <method name="GetLists">
-    <arg direction="out" type="a(ss)" name="lists"/>
+    <arg direction="out" type="a(ss)"/>
+    <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;OmaDoListEntry&gt;"/>
   </method>
   <method name="GetTasksForToday">
-    <arg direction="out" type="aa{sv}" name="tasks"/>
+    <arg direction="out" type="s"/>
+  </method>
+  <method name="GetOverdueTasks">
+    <arg direction="out" type="s"/>
   </method>
   <method name="GetPendingCount">
+    <arg direction="out" type="i"/>
     <arg direction="in"  type="s" name="listId"/>
-    <arg direction="out" type="i" name="count"/>
   </method>
   <method name="GetTotalPendingCount">
-    <arg direction="out" type="i" name="count"/>
+    <arg direction="out" type="i"/>
   </method>
   <method name="ToggleTask">
+    <arg direction="out" type="b"/>
     <arg direction="in"  type="s" name="taskId"/>
     <arg direction="in"  type="b" name="completed"/>
-    <arg direction="out" type="b" name="success"/>
   </method>
+  <method name="DeleteTask">
+    <arg direction="out" type="b"/>
+    <arg direction="in"  type="s" name="taskId"/>
+  </method>
+  <method name="CreateTaskFromNaturalText">
+    <arg direction="out" type="s"/>
+    <arg direction="in"  type="s" name="rawInput"/>
+    <arg direction="in"  type="b" name="addToMyDay"/>
+  </method>
+  <method name="PreviewNaturalText">
+    <arg direction="out" type="s"/>
+    <arg direction="in"  type="s" name="rawInput"/>
+  </method>
+  <method name="RescheduleTaskForMyDay">
+    <arg direction="out" type="b"/>
+    <arg direction="in"  type="s" name="taskId"/>
+  </method>
+  <method name="SnoozeTask">
+    <arg direction="out" type="b"/>
+    <arg direction="in"  type="s" name="taskId"/>
+    <arg direction="in"  type="i" name="minutes"/>
+  </method>
+  <method name="RequestSync"/>
   <signal name="TasksChanged">
     <arg type="s" name="listId"/>
   </signal>
   <signal name="TodayTasksChanged"/>
+  <signal name="SyncStarted"/>
+  <signal name="SyncFinished">
+    <arg type="b" name="success"/>
+    <arg type="s" name="message"/>
+  </signal>
 </interface>
 ```
 
-### 12.3 Plugin de Panel Quickshell (v1.1)
+### 12.3 Subcomandos CLI (`CliRunner`)
 
-Plugin QML independiente (`~/.config/omarchy/plugins/omado/`) que consume el D-Bus de OmaDo.
-Vive en su propio repositorio. OmaDo no contiene código del plugin.
+El binario `omado` soporta invocación directa sin interfaz gráfica para scripts, agentes y keybindings de Hyprland:
+
+- `omado add "<texto NLP>" [--my-day]` → Crea una tarea parseando lenguaje natural (vía D-Bus al demonio o directo en SQLite).
+- `omado list [--today | --overdue | --json]` → Lista tareas pendientes en texto plano o JSON.
+- `omado done <taskId>` → Marca la tarea como completada.
+- `omado reschedule <taskId>` → Reprograma una tarea vencida para *Mi Día*.
+- `omado sync` → Dispara `RequestSync` en el demonio.
+
+### 12.4 Plugin de Panel Quickshell (`omado.panel`)
+
+Plugin QML independiente (`~/.config/omarchy/plugins/omado.panel/` / repositorio `omado-plugin`) que consume el servicio D-Bus `io.omarchy.OmaDo`. En v2.0 puede invocar `CreateTaskFromNaturalText(text, true)`, `PreviewNaturalText(text)`, `GetOverdueTasks()` y `RescheduleTaskForMyDay(taskId)`.
 
 ---
 
-## 13. Dependencias del Sistema
+## 13. Dependencias del Sistema y Empaquetado Multi-Arquitectura
 
-| Paquete | Uso | Ya en Omarchy |
+| Paquete | Uso | Ya en Omarchy 4.5 |
 |---|---|---|
-| `qt6-base` | Core, Network, Sql, DBus, Concurrent | ✅ Sí |
-| `qt6-declarative` | QML engine | ✅ Sí |
-| `qt6-quickcontrols2` | Controls básicos QML | ✅ Sí |
-| `libsecret` | Backend Secret Service | ✅ Sí |
-| `gnome-keyring` | Daemon del Secret Service | ✅ Sí |
-| `qtkeychain` | Wrapper Qt para libsecret | ❌ Instalar |
-| `cmake` | Sistema de build | ❌ Instalar |
+| `qt6-base` | Core, Gui, Network, Sql, DBus, Concurrent | ✅ Sí |
+| `qt6-declarative` | QML engine, Quick, QuickControls2 | ✅ Sí |
+| `qt6-svg` | Renderizado de iconos SVG monocromáticos | ✅ Sí |
+| `libsecret` / `gnome-keyring` | Secret Service API | ✅ Sí |
+| `qtkeychain-qt6` | Wrapper Qt6 para libsecret | Instalar via pacman |
 
-```bash
-sudo pacman -S cmake qtkeychain-qt6
-```
+- **Arquitecturas soportadas en `PKGBUILD`:** `arch=('x86_64' 'aarch64')` (soporte nativo para PCs x86_64, Apple Silicon Mac y laptops ARM64 de Omarchy 4.5).
 
 ---
 
@@ -650,7 +751,7 @@ sudo pacman -S cmake qtkeychain-qt6
 
 ```cmake
 cmake_minimum_required(VERSION 3.21)
-project(omado VERSION 0.1.0 LANGUAGES CXX)
+project(omado VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -660,15 +761,6 @@ set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Sql DBus Concurrent)
 find_package(Qt6Keychain REQUIRED)
-
-qt_add_executable(omado src/main.cpp ...)
-qt_add_qml_module(omado URI "OmaDo" VERSION "1.0" ...)
-
-target_link_libraries(omado PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2
-    Qt6::Network Qt6::Sql Qt6::DBus Qt6::Concurrent
-    Qt6Keychain::Qt6Keychain
-)
 ```
 
 ---
