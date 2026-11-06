@@ -16,6 +16,14 @@ Dialog {
     property bool copiedFeedback: false
     property bool shortcutAddedFeedback: false
 
+    function getShortcutDesc(key) {
+        if (key === "SUPER + ALT + T") return qsTr("Tasks (Recommended)")
+        if (key === "SUPER + ALT + D") return qsTr("OmaDo")
+        if (key === "SUPER + ALT + N") return qsTr("New Task")
+        if (key === "SUPER + SHIFT + ALT + T") return qsTr("Quick Action")
+        return ""
+    }
+
     onOpened: {
         var configured = TaskModel.configuredHyprlandShortcut()
         if (configured && configured !== "") {
@@ -136,21 +144,21 @@ Dialog {
                     RowLayout {
                         spacing: 8
                         Text { text: "•"; color: Theme.accent; font.pixelSize: 11 }
-                        Text { text: "mañana a las 18:00 / tomorrow 6pm"; color: Theme.foreground; font.family: "iA Writer Mono"; font.pixelSize: 11; font.bold: true }
+                        Text { text: qsTr("tomorrow at 6pm"); color: Theme.foreground; font.family: "iA Writer Mono"; font.pixelSize: 11; font.bold: true }
                         Text { text: "→ " + qsTr("Due date & Reminder"); color: Theme.subtext; font.family: "iA Writer Mono"; font.pixelSize: 10 }
                     }
 
                     RowLayout {
                         spacing: 8
                         Text { text: "•"; color: Theme.accent; font.pixelSize: 11 }
-                        Text { text: "#Trabajo / #Compras"; color: Theme.foreground; font.family: "iA Writer Mono"; font.pixelSize: 11; font.bold: true }
+                        Text { text: qsTr("#Work / #Shopping"); color: Theme.foreground; font.family: "iA Writer Mono"; font.pixelSize: 11; font.bold: true }
                         Text { text: "→ " + qsTr("Target list"); color: Theme.subtext; font.family: "iA Writer Mono"; font.pixelSize: 10 }
                     }
 
                     RowLayout {
                         spacing: 8
                         Text { text: "•"; color: Theme.accent; font.pixelSize: 11 }
-                        Text { text: "! / !!  " + qsTr("or") + "  cada semana / daily"; color: Theme.foreground; font.family: "iA Writer Mono"; font.pixelSize: 11; font.bold: true }
+                        Text { text: "! / !!  " + qsTr("or") + "  " + qsTr("every week / daily"); color: Theme.foreground; font.family: "iA Writer Mono"; font.pixelSize: 11; font.bold: true }
                         Text { text: "→ " + qsTr("Priority & Recurrence"); color: Theme.subtext; font.family: "iA Writer Mono"; font.pixelSize: 10 }
                     }
                 }
@@ -201,10 +209,10 @@ Dialog {
 
                     Repeater {
                         model: [
-                            { key: "SUPER + ALT + T", label: "SUPER + ALT + T", desc: "Tasks (Recomendado)" },
-                            { key: "SUPER + ALT + D", label: "SUPER + ALT + D", desc: "OmaDo" },
-                            { key: "SUPER + ALT + N", label: "SUPER + ALT + N", desc: "New Task" },
-                            { key: "SUPER + SHIFT + ALT + T", label: "SUPER + SHIFT + ALT + T", desc: "Quick Action" }
+                            { key: "SUPER + ALT + T", label: "SUPER + ALT + T" },
+                            { key: "SUPER + ALT + D", label: "SUPER + ALT + D" },
+                            { key: "SUPER + ALT + N", label: "SUPER + ALT + N" },
+                            { key: "SUPER + SHIFT + ALT + T", label: "SUPER + SHIFT + ALT + T" }
                         ]
 
                         delegate: Rectangle {
@@ -232,7 +240,7 @@ Dialog {
                                 }
 
                                 Text {
-                                    text: "• " + modelData.desc
+                                    text: "• " + dialog.getShortcutDesc(modelData.key)
                                     color: dialog.selectedShortcut === modelData.key ? Theme.accent : Theme.subtext
                                     font.family: "iA Writer Mono"
                                     font.pixelSize: 9
